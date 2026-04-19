@@ -48,30 +48,30 @@ async function loadCalendarEvents() {
     });
   }
 
-  // 分享给我的日记
-  if (currentUserData && currentUserData.linkedUsers && currentUserData.linkedUsers.length) {
-    for (var j = 0; j < currentUserData.linkedUsers.length; j++) {
-      var user = currentUserData.linkedUsers[j];
-      var userDiaries = await db.collection('diaries')
-        .where('userId', '==', user.userId)
-        .get();
+  // 获取已链接用户的日记
+  var linkedIds = await getLinkedUserIds();
 
-      for (var k = 0; k < userDiaries.docs.length; k++) {
-        var diaryDoc = userDiaries.docs[k];
-        var diaryData = diaryDoc.data();
-        if (diaryData.visibility === 'shared' || diaryData.visibility === 'public') {
-          events.push({
-            id: diaryDoc.id,
-            title: user.displayName || user.email,
-            start: diaryData.date.toDate(),
-            backgroundColor: 'rgba(255, 200, 150, 0.6)',
-            borderColor: 'rgba(255, 200, 150, 0.8)',
-            extendedProps: {
-              diaryId: diaryDoc.id,
-              isMyDiary: false
-            }
-          });
-        }
+  for (var j = 0; j < linkedIds.length; j++) {
+    var userId = linkedIds[j];
+    var userDiaries = await db.collection('diaries').where('userId', '==', userId).get();
+    var userDoc = await db.collection('users').doc(userId).get();
+    var userName = userDoc.exists ? (userDoc.data().displayName || userDoc.data().email) : '已链接用户';
+
+    for (var k = 0; k < userDiaries.docs.length; k++) {
+      var diaryDoc = userDiaries.docs[k];
+      var diaryData = diaryDoc.data();
+      if (diaryData.visibility === 'public' || (diaryData.visibility === 'shared' && diaryData.sharedWith && diaryData.sharedWith.indexOf(currentUser.uid) !== -1)) {
+        events.push({
+          id: diaryDoc.id,
+          title: userName,
+          start: diaryData.date.toDate(),
+          backgroundColor: 'rgba(255, 200, 150, 0.6)',
+          borderColor: 'rgba(255, 200, 150, 0.8)',
+          extendedProps: {
+            diaryId: diaryDoc.id,
+            isMyDiary: false
+          }
+        });
       }
     }
   }
