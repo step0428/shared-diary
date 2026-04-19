@@ -167,7 +167,6 @@ async function handleIncomingLink(linkId) {
     var linkDoc = await db.collection('links').doc(linkId).get();
 
     if (!linkDoc.exists) {
-      alert('链接无效或已过期');
       return;
     }
 
@@ -178,7 +177,6 @@ async function handleIncomingLink(linkId) {
     }
 
     if (linkData.accepted) {
-      alert('此链接已使用');
       return;
     }
 
@@ -188,6 +186,7 @@ async function handleIncomingLink(linkId) {
       alert('连接成功！');
       loadLinkedUsers();
       loadDiaries();
+      refreshCalendar();
     }
   } catch (error) {
     console.error('处理链接失败:', error);
@@ -199,6 +198,7 @@ async function loadPendingLinks() {
   var pendingLinks = document.getElementById('pendingLinks');
   pendingLinks.innerHTML = '';
 
+  // 查找发给我的未被接受的链接
   var snapshot = await db.collection('links')
     .where('accepted', '==', false)
     .get();
@@ -243,23 +243,29 @@ async function loadLinkedUsers() {
   var linkedUsers = document.getElementById('linkedUsers');
   linkedUsers.innerHTML = '';
 
-  if (!currentUserData || !currentUserData.linkedUsers || !currentUserData.linkedUsers.length) {
+  var acceptedLinks = await getAcceptedLinks();
+
+  if (acceptedLinks.length === 0) {
     linkedUsers.innerHTML = '<div style="font-size:13px;color:rgba(255,255,255,0.3)">还没有链接的人</div>';
     return;
   }
 
-  currentUserData.linkedUsers.forEach(function(user) {
+  for (var i = 0; i < acceptedLinks.length; i++) {
+    var linkDoc = acceptedLinks[i];
+    var linkData = linkDoc.data();
+    var isCreator = linkData.userId === currentUser.uid;
+    var otherUser = await getLinkUserInfo(linkData, isCreator);
+
     var item = document.createElement('div');
     item.className = 'linked-item';
-    item.innerHTML = '<div class="user-info"><span class="user-email">' + (user.displayName || user.email) + '</span><span class="user-status">已连接</span></div><button class="unlink-btn" data-id="' + user.userId + '">解除</button>';
+    item.innerHTML = '<div class="user-info"><span class="user-email">' + otherUser.displayName + '</span><span class="user-status">已连接</span></div><button class="unlink-btn" data-id="' + linkDoc.id + '">解除</button>';
     linkedUsers.appendChild(item);
-  });
+  }
 
   linkedUsers.querySelectorAll('.unlink-btn').forEach(function(btn) {
     btn.addEventListener('click', async function() {
       if (confirm('确定要解除连接吗？')) {
         await unlinkUser(btn.dataset.id);
-        await loadUserData();
         loadLinkedUsers();
         loadDiaries();
         refreshCalendar();
