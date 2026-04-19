@@ -1,9 +1,9 @@
 // 认证状态
-let currentUser = null;
-let currentUserData = null;
+var currentUser = null;
+var currentUserData = null;
 
 // 监听认证状态
-auth.onAuthStateChanged(async (user) => {
+auth.onAuthStateChanged(async function(user) {
   if (user) {
     currentUser = user;
     await loadUserData();
@@ -20,7 +20,7 @@ auth.onAuthStateChanged(async (user) => {
 
 // 加载用户数据
 async function loadUserData() {
-  const doc = await db.collection('users').doc(currentUser.uid).get();
+  var doc = await db.collection('users').doc(currentUser.uid).get();
   if (doc.exists) {
     currentUserData = doc.data();
   }
@@ -36,14 +36,14 @@ function showAuthPage() {
 function showMainApp() {
   document.getElementById('authPage').classList.add('hidden');
   document.getElementById('mainApp').classList.remove('hidden');
-  document.getElementById('userName').textContent = currentUserData?.displayName || currentUser.email;
+  document.getElementById('userName').textContent = currentUserData && currentUserData.displayName ? currentUserData.displayName : currentUser.email;
   // 检查链接邀请
-  setTimeout(() => window.checkInviteLink(), 500);
+  setTimeout(function() { window.checkInviteLink(); }, 500);
 }
 
 // 注册
 async function register(email, password, displayName) {
-  const result = await auth.createUserWithEmailAndPassword(email, password);
+  var result = await auth.createUserWithEmailAndPassword(email, password);
 
   // 创建用户文档
   await db.collection('users').doc(result.user.uid).set({
@@ -66,25 +66,12 @@ async function logout() {
   await auth.signOut();
 }
 
-// 获取我的链接
-async function getMyLink() {
-  const snapshot = await db.collection('links')
-    .where('userId', '==', currentUser.uid)
-    .limit(1)
-    .get();
-
-  if (!snapshot.empty) {
-    return snapshot.docs[0];
-  }
-  return null;
-}
-
 // 创建链接
 async function createLink() {
-  const linkRef = await db.collection('links').add({
+  var linkRef = await db.collection('links').add({
     userId: currentUser.uid,
     userEmail: currentUser.email,
-    userDisplayName: currentUserData?.displayName || '',
+    userDisplayName: currentUserData && currentUserData.displayName ? currentUserData.displayName : '',
     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     accepted: false,
     acceptedBy: null
@@ -95,15 +82,15 @@ async function createLink() {
 
 // 处理链接
 async function acceptLink(linkId) {
-  const linkDoc = await db.collection('links').doc(linkId).get();
-  const linkData = linkDoc.data();
+  var linkDoc = await db.collection('links').doc(linkId).get();
+  var linkData = linkDoc.data();
 
   // 获取对方用户数据
-  const otherUserDoc = await db.collection('users').doc(linkData.userId).get();
-  const otherUserData = otherUserDoc.data();
+  var otherUserDoc = await db.collection('users').doc(linkData.userId).get();
+  var otherUserData = otherUserDoc.data();
 
   // 添加到我的 linkedUsers
-  const myUpdate = {};
+  var myUpdate = {};
   myUpdate['linkedUsers'] = firebase.firestore.FieldValue.arrayUnion({
     userId: linkData.userId,
     email: linkData.userEmail,
@@ -113,11 +100,11 @@ async function acceptLink(linkId) {
   await db.collection('users').doc(currentUser.uid).update(myUpdate);
 
   // 添加到对方的 linkedUsers
-  const otherUpdate = {};
+  var otherUpdate = {};
   otherUpdate['linkedUsers'] = firebase.firestore.FieldValue.arrayUnion({
     userId: currentUser.uid,
     email: currentUser.email,
-    displayName: currentUserData?.displayName || '',
+    displayName: currentUserData && currentUserData.displayName ? currentUserData.displayName : '',
     linkedAt: new Date()
   });
   await db.collection('users').doc(linkData.userId).update(otherUpdate);
@@ -136,20 +123,35 @@ async function rejectLink(linkId) {
 
 // 解除链接
 async function unlinkUser(userId) {
-  // 从我的列表移除
-  await db.collection('users').doc(currentUser.uid).update({
-    linkedUsers: firebase.firestore.FieldValue.arrayRemove(
-      currentUserData.linkedUsers.find(u => u.userId === userId)
-    )
-  });
+  // 找到要移除的用户对象
+  var userToRemove = null;
+  if (currentUserData && currentUserData.linkedUsers) {
+    for (var i = 0; i < currentUserData.linkedUsers.length; i++) {
+      if (currentUserData.linkedUsers[i].userId === userId) {
+        userToRemove = currentUserData.linkedUsers[i];
+        break;
+      }
+    }
+  }
+
+  if (userToRemove) {
+    await db.collection('users').doc(currentUser.uid).update({
+      linkedUsers: firebase.firestore.FieldValue.arrayRemove(userToRemove)
+    });
+  }
 
   // 从对方列表移除
-  const otherUserDoc = await db.collection('users').doc(userId).get();
-  const otherUserData = otherUserDoc.data();
+  var otherUserDoc = await db.collection('users').doc(userId).get();
+  var otherUserData = otherUserDoc.data();
 
-  await db.collection('users').doc(userId).update({
-    linkedUsers: firebase.firestore.FieldValue.arrayRemove(
-      otherUserData.linkedUsers.find(u => u.userId === currentUser.uid)
-    )
-  });
+  if (otherUserData && otherUserData.linkedUsers) {
+    for (var j = 0; j < otherUserData.linkedUsers.length; j++) {
+      if (otherUserData.linkedUsers[j].userId === currentUser.uid) {
+        await db.collection('users').doc(userId).update({
+          linkedUsers: firebase.firestore.FieldValue.arrayRemove(otherUserData.linkedUsers[j])
+        });
+        break;
+      }
+    }
+  }
 }
