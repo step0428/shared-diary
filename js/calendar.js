@@ -27,58 +27,44 @@ async function loadCalendarEvents() {
 
   var events = [];
 
-  // 我的日记
-  var myDiaries = await db.collection('diaries')
-    .where('userId', '==', currentUser.uid)
-    .get();
+  try {
+    var linkedIds = await getLinkedUserIds();
 
-  for (var i = 0; i < myDiaries.docs.length; i++) {
-    var doc = myDiaries.docs[i];
-    var data = doc.data();
-    events.push({
-      id: doc.id,
-      title: '我的日记',
-      start: data.date.toDate(),
-      backgroundColor: 'rgba(126, 184, 218, 0.6)',
-      borderColor: 'rgba(126, 184, 218, 0.8)',
-      extendedProps: {
-        diaryId: doc.id,
-        isMyDiary: true
-      }
-    });
-  }
+    // 获取所有日记
+    var allDiaries = await db.collection('diaries').get();
 
-  // 获取已链接用户的日记
-  var linkedIds = await getLinkedUserIds();
+    for (var i = 0; i < allDiaries.docs.length; i++) {
+      var doc = allDiaries.docs[i];
+      var data = doc.data();
 
-  for (var j = 0; j < linkedIds.length; j++) {
-    var userId = linkedIds[j];
-    var userDiaries = await db.collection('diaries').where('userId', '==', userId).get();
-    var userDoc = await db.collection('users').doc(userId).get();
-    var userName = userDoc.exists ? (userDoc.data().displayName || userDoc.data().email) : '已链接用户';
+      var isMine = data.userId === currentUser.uid;
+      var isLinkedAndShared = linkedIds.indexOf(data.userId) !== -1 &&
+        (data.visibility === 'public' || (data.visibility === 'shared' && data.sharedWith && data.sharedWith.indexOf(currentUser.uid) !== -1));
 
-    for (var k = 0; k < userDiaries.docs.length; k++) {
-      var diaryDoc = userDiaries.docs[k];
-      var diaryData = diaryDoc.data();
-      if (diaryData.visibility === 'public' || (diaryData.visibility === 'shared' && diaryData.sharedWith && diaryData.sharedWith.indexOf(currentUser.uid) !== -1)) {
+      if (isMine || isLinkedAndShared) {
+        var userDoc = await db.collection('users').doc(data.userId).get();
+        var userName = isMine ? '我的日记' : (userDoc.exists ? (userDoc.data().displayName || userDoc.data().email) : '已链接用户');
+
         events.push({
-          id: diaryDoc.id,
+          id: doc.id,
           title: userName,
-          start: diaryData.date.toDate(),
-          backgroundColor: 'rgba(255, 200, 150, 0.6)',
-          borderColor: 'rgba(255, 200, 150, 0.8)',
+          start: data.date.toDate(),
+          backgroundColor: isMine ? 'rgba(126, 184, 218, 0.6)' : 'rgba(255, 200, 150, 0.6)',
+          borderColor: isMine ? 'rgba(126, 184, 218, 0.8)' : 'rgba(255, 200, 150, 0.8)',
           extendedProps: {
-            diaryId: diaryDoc.id,
-            isMyDiary: false
+            diaryId: doc.id,
+            isMyDiary: isMine
           }
         });
       }
     }
-  }
 
-  calendar.removeAllEvents();
-  for (var m = 0; m < events.length; m++) {
-    calendar.addEvent(events[m]);
+    calendar.removeAllEvents();
+    for (var j = 0; j < events.length; j++) {
+      calendar.addEvent(events[j]);
+    }
+  } catch (e) {
+    console.error('加载日历失败:', e);
   }
 }
 
