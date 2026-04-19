@@ -23,6 +23,13 @@ async function loadUserData() {
   var doc = await db.collection('users').doc(currentUser.uid).get();
   if (doc.exists) {
     currentUserData = doc.data();
+  } else {
+    // 如果用户文档不存在，创建一个
+    currentUserData = {
+      email: currentUser.email,
+      displayName: currentUser.displayName || '',
+      linkedUsers: []
+    };
   }
 }
 
@@ -49,8 +56,7 @@ async function register(email, password, displayName) {
   await db.collection('users').doc(result.user.uid).set({
     email: email,
     displayName: displayName,
-    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-    linkedUsers: []
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
   });
 
   return result;
@@ -80,40 +86,33 @@ async function createLink() {
   return linkRef.id;
 }
 
+// 获取我的已接受链接（作为创建者或接受者）
+async function getAcceptedLinks() {
+  // 查找我创建的被接受的链接
+  var created = await db.collection('links')
+    .where('userId', '==', currentUser.uid)
+    .where('accepted', '==', true)
+    .get();
+
+  // 查找我接受的链接（我是acceptedBy）
+  var accepted = await db.collection('links')
+    .where('acceptedBy', '==', currentUser.uid)
+    .where('accepted', '==', true)
+    .get();
+
+  return [].concat(created.docs, accepted.docs);
+}
+
 // 处理链接
 async function acceptLink(linkId) {
-  var linkDoc = await db.collection('links').doc(linkId).get();
-  var linkData = linkDoc.data();
-
-  // 获取对方用户数据
-  var otherUserDoc = await db.collection('users').doc(linkData.userId).get();
-  var otherUserData = otherUserDoc.data();
-
-  // 添加到我的 linkedUsers
-  var myUpdate = {};
-  myUpdate['linkedUsers'] = firebase.firestore.FieldValue.arrayUnion({
-    userId: linkData.userId,
-    email: linkData.userEmail,
-    displayName: linkData.userDisplayName,
-    linkedAt: new Date()
-  });
-  await db.collection('users').doc(currentUser.uid).update(myUpdate);
-
-  // 添加到对方的 linkedUsers
-  var otherUpdate = {};
-  otherUpdate['linkedUsers'] = firebase.firestore.FieldValue.arrayUnion({
-    userId: currentUser.uid,
-    email: currentUser.email,
-    displayName: currentUserData && currentUserData.displayName ? currentUserData.displayName : '',
-    linkedAt: new Date()
-  });
-  await db.collection('users').doc(linkData.userId).update(otherUpdate);
-
-  // 标记链接为已接受
+  // 更新链接状态
   await db.collection('links').doc(linkId).update({
     accepted: true,
     acceptedBy: currentUser.uid
   });
+
+  // 重新加载已链接用户
+  await loadLinkedUsers();
 }
 
 // 拒绝链接
@@ -122,36 +121,25 @@ async function rejectLink(linkId) {
 }
 
 // 解除链接
-async function unlinkUser(userId) {
-  // 找到要移除的用户对象
-  var userToRemove = null;
-  if (currentUserData && currentUserData.linkedUsers) {
-    for (var i = 0; i < currentUserData.linkedUsers.length; i++) {
-      if (currentUserData.linkedUsers[i].userId === userId) {
-        userToRemove = currentUserData.linkedUsers[i];
-        break;
-      }
-    }
-  }
+async function unlinkUser(linkId) {
+  await db.collection('links').doc(linkId).delete();
+  await loadLinkedUsers();
+}
 
-  if (userToRemove) {
-    await db.collection('users').doc(currentUser.uid).update({
-      linkedUsers: firebase.firestore.FieldValue.arrayRemove(userToRemove)
-    });
+// 获取链接用户的信息
+async function getLinkUserInfo(linkData, isCreator) {
+  var otherUid = isCreator ? linkData.acceptedBy : linkData.userId;
+  var otherUserDoc = await db.collection('users').doc(otherUid).get();
+  if (otherUserDoc.exists) {
+    return {
+      userId: otherUid,
+      email: otherUserDoc.data().email,
+      displayName: otherUserDoc.data().displayName || otherUserDoc.data().email
+    };
   }
-
-  // 从对方列表移除
-  var otherUserDoc = await db.collection('users').doc(userId).get();
-  var otherUserData = otherUserDoc.data();
-
-  if (otherUserData && otherUserData.linkedUsers) {
-    for (var j = 0; j < otherUserData.linkedUsers.length; j++) {
-      if (otherUserData.linkedUsers[j].userId === currentUser.uid) {
-        await db.collection('users').doc(userId).update({
-          linkedUsers: firebase.firestore.FieldValue.arrayRemove(otherUserData.linkedUsers[j])
-        });
-        break;
-      }
-    }
-  }
+  return {
+    userId: otherUid,
+    email: isCreator ? linkData.userEmail : 'unknown',
+    displayName: isCreator ? (linkData.userDisplayName || linkData.userEmail) : 'unknown'
+  };
 }
