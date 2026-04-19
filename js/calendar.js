@@ -50,12 +50,16 @@ async function loadCalendarEvents() {
   // 分享给我的日记
   if (currentUserData?.linkedUsers?.length) {
     for (const user of currentUserData.linkedUsers) {
-      const sharedDiaries = await db.collection('diaries')
+      const userDiaries = await db.collection('diaries')
         .where('userId', '==', user.userId)
-        .where('visibility', 'in', ['shared', 'public'])
         .get();
 
-      for (const doc of sharedDiaries.docs) {
+      const sharedDiaries = userDiaries.docs.filter(doc => {
+        const v = doc.data().visibility;
+        return v === 'shared' || v === 'public';
+      });
+
+      for (const doc of sharedDiaries) {
         const data = doc.data();
         events.push({
           id: doc.id,
@@ -91,5 +95,7 @@ function handleCalendarDateClick(info) {
 
 // 刷新日历
 function refreshCalendar() {
+  loadCalendarEvents();
+}
   loadCalendarEvents();
 }
