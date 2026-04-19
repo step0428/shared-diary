@@ -1,9 +1,9 @@
 // 日历实例
-let calendar = null;
+var calendar = null;
 
 // 初始化日历
 function initCalendar() {
-  const calendarEl = document.getElementById('calendar');
+  var calendarEl = document.getElementById('calendar');
 
   calendar = new FullCalendar.Calendar(calendarEl, {
     initialView: 'dayGridMonth',
@@ -25,15 +25,16 @@ function initCalendar() {
 async function loadCalendarEvents() {
   if (!calendar) return;
 
-  const events = [];
+  var events = [];
 
   // 我的日记
-  const myDiaries = await db.collection('diaries')
+  var myDiaries = await db.collection('diaries')
     .where('userId', '==', currentUser.uid)
     .get();
 
-  for (const doc of myDiaries.docs) {
-    const data = doc.data();
+  for (var i = 0; i < myDiaries.docs.length; i++) {
+    var doc = myDiaries.docs[i];
+    var data = doc.data();
     events.push({
       id: doc.id,
       title: '我的日记',
@@ -48,54 +49,52 @@ async function loadCalendarEvents() {
   }
 
   // 分享给我的日记
-  if (currentUserData?.linkedUsers?.length) {
-    for (const user of currentUserData.linkedUsers) {
-      const userDiaries = await db.collection('diaries')
+  if (currentUserData && currentUserData.linkedUsers && currentUserData.linkedUsers.length) {
+    for (var j = 0; j < currentUserData.linkedUsers.length; j++) {
+      var user = currentUserData.linkedUsers[j];
+      var userDiaries = await db.collection('diaries')
         .where('userId', '==', user.userId)
         .get();
 
-      const sharedDiaries = userDiaries.docs.filter(doc => {
-        const v = doc.data().visibility;
-        return v === 'shared' || v === 'public';
-      });
-
-      for (const doc of sharedDiaries) {
-        const data = doc.data();
-        events.push({
-          id: doc.id,
-          title: user.displayName || user.email,
-          start: data.date.toDate(),
-          backgroundColor: 'rgba(255, 200, 150, 0.6)',
-          borderColor: 'rgba(255, 200, 150, 0.8)',
-          extendedProps: {
-            diaryId: doc.id,
-            isMyDiary: false
-          }
-        });
+      for (var k = 0; k < userDiaries.docs.length; k++) {
+        var diaryDoc = userDiaries.docs[k];
+        var diaryData = diaryDoc.data();
+        if (diaryData.visibility === 'shared' || diaryData.visibility === 'public') {
+          events.push({
+            id: diaryDoc.id,
+            title: user.displayName || user.email,
+            start: diaryData.date.toDate(),
+            backgroundColor: 'rgba(255, 200, 150, 0.6)',
+            borderColor: 'rgba(255, 200, 150, 0.8)',
+            extendedProps: {
+              diaryId: diaryDoc.id,
+              isMyDiary: false
+            }
+          });
+        }
       }
     }
   }
 
   calendar.removeAllEvents();
-  events.forEach(event => calendar.addEvent(event));
+  for (var m = 0; m < events.length; m++) {
+    calendar.addEvent(events[m]);
+  }
 }
 
 // 处理日历事件点击
 function handleCalendarEventClick(info) {
-  const diaryId = info.event.extendedProps.diaryId;
+  var diaryId = info.event.extendedProps.diaryId;
   showDiaryDetail(diaryId);
 }
 
 // 处理日期点击
 function handleCalendarDateClick(info) {
-  // 可以打开写日记弹窗并预填日期
   document.getElementById('diaryDate').value = info.dateStr;
   openWriteModal();
 }
 
 // 刷新日历
 function refreshCalendar() {
-  loadCalendarEvents();
-}
   loadCalendarEvents();
 }
