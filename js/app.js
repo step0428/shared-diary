@@ -204,15 +204,17 @@ async function loadPendingLinks() {
 
   const snapshot = await db.collection('links')
     .where('accepted', '==', false)
-    .where('userId', '!=', currentUser.uid)
     .get();
 
-  if (snapshot.empty) {
+  // 客户端过滤
+  const myPendingLinks = snapshot.docs.filter(doc => doc.data().userId !== currentUser.uid);
+
+  if (myPendingLinks.length === 0) {
     pendingLinks.innerHTML = '<div style="font-size:13px;color:rgba(255,255,255,0.3)">没有待处理的链接请求</div>';
     return;
   }
 
-  snapshot.forEach(doc => {
+  myPendingLinks.forEach(doc => {
     const data = doc.data();
     const item = document.createElement('div');
     item.className = 'pending-item';
