@@ -1,3 +1,18 @@
+// 获取已链接用户的ID列表
+async function getLinkedUserIds() {
+  var acceptedLinks = await getAcceptedLinks();
+  var linkedIds = [];
+  for (var i = 0; i < acceptedLinks.length; i++) {
+    var linkData = acceptedLinks[i].data();
+    if (linkData.userId === currentUser.uid) {
+      linkedIds.push(linkData.acceptedBy);
+    } else {
+      linkedIds.push(linkData.userId);
+    }
+  }
+  return linkedIds;
+}
+
 // 加载日记列表
 async function loadDiaries() {
   var diaryList = document.getElementById('diaryList');
@@ -5,37 +20,42 @@ async function loadDiaries() {
   // 获取我写的日记
   var myDiaries = await db.collection('diaries')
     .where('userId', '==', currentUser.uid)
-    .orderBy('date', 'desc')
     .get();
 
-  // 获取分享给我的日记（客户端过滤）
-  var allShared = await db.collection('diaries')
-    .where('visibility', '==', 'shared')
-    .get();
-  var sharedDiaries = allShared.docs.filter(function(doc) {
-    return doc.data().sharedWith && doc.data().sharedWith.indexOf(currentUser.uid) !== -1;
-  });
+  // 按日期排序
+  var allDiaryDocs = myDiaries.docs.slice();
 
-  // 获取公开日记（客户端过滤）
-  var allPublic = await db.collection('diaries')
-    .where('visibility', '==', 'public')
-    .get();
-  var publicDiaries = allPublic.docs;
+  // 获取已链接用户的ID
+  var linkedIds = await getLinkedUserIds();
 
-  var allDiaries = [].concat(myDiaries.docs, sharedDiaries, publicDiaries);
-  allDiaries.sort(function(a, b) {
+  // 获取链接用户的日记
+  for (var i = 0; i < linkedIds.length; i++) {
+    var userId = linkedIds[i];
+    var userDiaries = await db.collection('diaries').where('userId', '==', userId).get();
+    for (var j = 0; j < userDiaries.docs.length; j++) {
+      var doc = userDiaries.docs[j];
+      var data = doc.data();
+      // 只显示公开或分享给我的
+      if (data.visibility === 'public' || (data.visibility === 'shared' && data.sharedWith && data.sharedWith.indexOf(currentUser.uid) !== -1)) {
+        allDiaryDocs.push(doc);
+      }
+    }
+  }
+
+  // 按日期排序
+  allDiaryDocs.sort(function(a, b) {
     return b.data().date.toDate() - a.data().date.toDate();
   });
 
-  if (allDiaries.length === 0) {
+  if (allDiaryDocs.length === 0) {
     diaryList.innerHTML = '<div class="empty-state">还没有日记<br>写下第一篇吧</div>';
     return;
   }
 
   diaryList.innerHTML = '';
 
-  for (var i = 0; i < allDiaries.length; i++) {
-    var doc = allDiaries[i];
+  for (var k = 0; k < allDiaryDocs.length; k++) {
+    var doc = allDiaryDocs[k];
     var data = doc.data();
     var authorDoc = await db.collection('users').doc(data.userId).get();
     var authorName = authorDoc.exists ? (authorDoc.data().displayName || authorDoc.data().email) : '未知';
@@ -106,22 +126,28 @@ async function saveDiary(content, date, visibility, sharedWith, imageFile) {
   closeWriteModal();
 }
 
-// 加载分享用户列表
+// 加载分享用户列表（用于写日记时选择分享对象）
 async function loadShareUsers() {
   var shareList = document.getElementById('shareList');
   shareList.innerHTML = '';
 
-  if (!currentUserData || !currentUserData.linkedUsers || !currentUserData.linkedUsers.length) {
+  var linkedIds = await getLinkedUserIds();
+
+  if (linkedIds.length === 0) {
     shareList.innerHTML = '<span style="font-size:13px;color:rgba(255,255,255,0.35)">暂无链接的人</span>';
     return;
   }
 
-  for (var i = 0; i < currentUserData.linkedUsers.length; i++) {
-    var user = currentUserData.linkedUsers[i];
-    var item = document.createElement('label');
-    item.className = 'share-item';
-    item.innerHTML = '<input type="checkbox" value="' + user.userId + '"><span>' + (user.displayName || user.email) + '</span>';
-    shareList.appendChild(item);
+  for (var i = 0; i < linkedIds.length; i++) {
+    var userId = linkedIds[i];
+    var userDoc = await db.collection('users').doc(userId).get();
+    if (userDoc.exists) {
+      var userData = userDoc.data();
+      var item = document.createElement('label');
+      item.className = 'share-item';
+      item.innerHTML = '<input type="checkbox" value="' + userId + '"><span>' + (userData.displayName || userData.email) + '</span>';
+      shareList.appendChild(item);
+    }
   }
 }
 
