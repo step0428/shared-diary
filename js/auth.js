@@ -98,30 +98,34 @@ async function acceptLink(linkId) {
   const linkDoc = await db.collection('links').doc(linkId).get();
   const linkData = linkDoc.data();
 
-  // 添加到彼此的 linkedUsers
-  await db.collection('users').doc(currentUser.uid).update({
-    linkedUsers: firebase.firestore.FieldValue.arrayUnion({
-      userId: linkData.userId,
-      email: linkData.userEmail,
-      displayName: linkData.userDisplayName,
-      linkedAt: firebase.firestore.FieldValue.serverTimestamp()
-    })
-  });
+  // 获取对方用户数据
+  const otherUserDoc = await db.collection('users').doc(linkData.userId).get();
+  const otherUserData = otherUserDoc.data();
 
-  await db.collection('users').doc(linkData.userId).update({
-    linkedUsers: firebase.firestore.FieldValue.arrayUnion({
-      userId: currentUser.uid,
-      email: currentUser.email,
-      displayName: currentUserData?.displayName || '',
-      linkedAt: firebase.firestore.FieldValue.serverTimestamp()
-    })
+  // 添加到我的 linkedUsers
+  const myUpdate = {};
+  myUpdate['linkedUsers'] = firebase.firestore.FieldValue.arrayUnion({
+    userId: linkData.userId,
+    email: linkData.userEmail,
+    displayName: linkData.userDisplayName,
+    linkedAt: new Date()
   });
+  await db.collection('users').doc(currentUser.uid).update(myUpdate);
+
+  // 添加到对方的 linkedUsers
+  const otherUpdate = {};
+  otherUpdate['linkedUsers'] = firebase.firestore.FieldValue.arrayUnion({
+    userId: currentUser.uid,
+    email: currentUser.email,
+    displayName: currentUserData?.displayName || '',
+    linkedAt: new Date()
+  });
+  await db.collection('users').doc(linkData.userId).update(otherUpdate);
 
   // 标记链接为已接受
   await db.collection('links').doc(linkId).update({
     accepted: true,
-    acceptedBy: currentUser.uid,
-    acceptedAt: firebase.firestore.FieldValue.serverTimestamp()
+    acceptedBy: currentUser.uid
   });
 }
 
