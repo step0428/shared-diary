@@ -2,27 +2,27 @@
 async function loadDiaries() {
   const diaryList = document.getElementById('diaryList');
 
-  // 获取我写的和分享给我的日记
+  // 获取我写的日记
   const myDiaries = await db.collection('diaries')
     .where('userId', '==', currentUser.uid)
     .orderBy('date', 'desc')
     .get();
 
-  // 获取分享给我的日记（来自已链接用户）
-  const sharedDiaries = await db.collection('diaries')
+  // 获取分享给我的日记（来自已链接用户，客户端过滤）
+  const allShared = await db.collection('diaries')
     .where('visibility', '==', 'shared')
-    .where('sharedWith', 'array-contains', currentUser.uid)
-    .orderBy('date', 'desc')
     .get();
+  const sharedDiaries = allShared.docs.filter(doc =>
+    doc.data().sharedWith.includes(currentUser.uid)
+  );
 
-  // 获取公开日记
-  const publicDiaries = await db.collection('diaries')
+  // 获取公开日记（客户端过滤）
+  const allPublic = await db.collection('diaries')
     .where('visibility', '==', 'public')
-    .orderBy('date', 'desc')
-    .limit(20)
     .get();
+  const publicDiaries = allPublic.docs;
 
-  const allDiaries = [...myDiaries.docs, ...sharedDiaries.docs, ...publicDiaries.docs];
+  const allDiaries = [...myDiaries.docs, ...sharedDiaries, ...publicDiaries];
   allDiaries.sort((a, b) => b.data().date.toDate() - a.data().date.toDate());
 
   if (allDiaries.length === 0) {
