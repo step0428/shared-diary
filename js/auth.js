@@ -24,11 +24,9 @@ async function loadUserData() {
   if (doc.exists) {
     currentUserData = doc.data();
   } else {
-    // 如果用户文档不存在，创建一个
     currentUserData = {
       email: currentUser.email,
-      displayName: currentUser.displayName || '',
-      linkedUsers: []
+      displayName: currentUser.displayName || ''
     };
   }
 }
@@ -44,7 +42,6 @@ function showMainApp() {
   document.getElementById('authPage').classList.add('hidden');
   document.getElementById('mainApp').classList.remove('hidden');
   document.getElementById('userName').textContent = currentUserData && currentUserData.displayName ? currentUserData.displayName : currentUser.email;
-  // 检查链接邀请
   setTimeout(function() { window.checkInviteLink(); }, 500);
 }
 
@@ -52,7 +49,6 @@ function showMainApp() {
 async function register(email, password, displayName) {
   var result = await auth.createUserWithEmailAndPassword(email, password);
 
-  // 创建用户文档
   await db.collection('users').doc(result.user.uid).set({
     email: email,
     displayName: displayName,
@@ -86,33 +82,32 @@ async function createLink() {
   return linkRef.id;
 }
 
-// 获取我的已接受链接（作为创建者或接受者）
+// 获取已接受链接
 async function getAcceptedLinks() {
-  // 查找我创建的被接受的链接
-  var created = await db.collection('links')
-    .where('userId', '==', currentUser.uid)
-    .where('accepted', '==', true)
-    .get();
+  try {
+    // 获取所有链接，客户端过滤
+    var allLinks = await db.collection('links').where('accepted', '==', true).get();
 
-  // 查找我接受的链接（我是acceptedBy）
-  var accepted = await db.collection('links')
-    .where('acceptedBy', '==', currentUser.uid)
-    .where('accepted', '==', true)
-    .get();
+    var myLinks = [];
+    allLinks.docs.forEach(function(doc) {
+      var data = doc.data();
+      if (data.userId === currentUser.uid || data.acceptedBy === currentUser.uid) {
+        myLinks.push(doc);
+      }
+    });
 
-  return [].concat(created.docs, accepted.docs);
+    return myLinks;
+  } catch (e) {
+    return [];
+  }
 }
 
-// 处理链接
+// 接受链接
 async function acceptLink(linkId) {
-  // 更新链接状态
   await db.collection('links').doc(linkId).update({
     accepted: true,
     acceptedBy: currentUser.uid
   });
-
-  // 重新加载已链接用户
-  await loadLinkedUsers();
 }
 
 // 拒绝链接
@@ -123,10 +118,9 @@ async function rejectLink(linkId) {
 // 解除链接
 async function unlinkUser(linkId) {
   await db.collection('links').doc(linkId).delete();
-  await loadLinkedUsers();
 }
 
-// 获取链接用户的信息
+// 获取链接另一方的用户信息
 async function getLinkUserInfo(linkData, isCreator) {
   var otherUid = isCreator ? linkData.acceptedBy : linkData.userId;
   var otherUserDoc = await db.collection('users').doc(otherUid).get();
