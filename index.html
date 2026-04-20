@@ -75,9 +75,7 @@
             写日记
           </button>
         </div>
-        <div class="diary-list" id="diaryList">
-          <!-- 日记列表 -->
-        </div>
+        <div class="diary-list" id="diaryList"></div>
       </div>
 
       <!-- 日历视图 -->
@@ -103,15 +101,18 @@
           <input type="text" id="diaryTitle" placeholder="日记标题（选填）" style="width:100%;padding:12px 14px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:rgba(255,255,255,0.9);font-size:15px;font-family:inherit;margin-bottom:15px;">
           <textarea id="diaryContent" placeholder="今天发生了什么..." required></textarea>
           <div class="form-row">
-            <label>标签</label>
-            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <label>标签 <button type="button" id="manageTagsBtn" style="margin-left:8px;padding:4px 10px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:10px;color:rgba(255,255,255,0.5);font-size:11px;cursor:pointer;">管理</button></label>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
               <div id="tagOptions" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
               <button type="button" id="addTagBtn" style="padding:6px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:15px;color:rgba(255,255,255,0.6);font-size:12px;cursor:pointer;">+ 新标签</button>
             </div>
           </div>
           <div class="form-row">
-            <label>日期</label>
-            <input type="date" id="diaryDate" required>
+            <label>日期和时间</label>
+            <div style="display:flex;gap:10px;">
+              <input type="date" id="diaryDate" required>
+              <input type="time" id="diaryTime" style="padding:12px 14px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:rgba(255,255,255,0.9);font-size:14px;font-family:inherit;">
+            </div>
           </div>
           <div class="form-row">
             <label>可见性</label>
@@ -131,6 +132,23 @@
           </div>
           <button type="submit" class="submit-btn">保存</button>
         </form>
+      </div>
+    </div>
+
+    <!-- 标签管理弹窗 -->
+    <div class="modal hidden" id="tagModal">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>管理标签</h3>
+          <button class="modal-close" id="closeTagModal">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div id="tagManagementList" style="display:flex;flex-direction:column;gap:12px;"></div>
       </div>
     </div>
 
@@ -185,7 +203,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
   <script src="js/firebase-config.js"></script>
   <script src="js/auth.js"></script>
