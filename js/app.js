@@ -205,10 +205,19 @@ function renderFriendSidebar() {
       var isCreator = linkData.userId === currentUser.uid;
       (function(doc, data, creator) {
         getLinkUserInfo(data, creator).then(function(otherUser) {
+          var avatarHtml = '';
+          if (otherUser.avatarUrl) {
+            avatarHtml = '<img src="' + otherUser.avatarUrl + '" style="width:24px;height:24px;border-radius:50%;object-fit:cover;margin-right:8px;">';
+          } else {
+            avatarHtml = '<div style="width:24px;height:24px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;margin-right:8px;flex-shrink:0;">' + (otherUser.displayName ? otherUser.displayName.charAt(0).toUpperCase() : '?') + '</div>';
+          }
+
           var item = document.createElement('div');
           item.className = 'friend-item';
           item.dataset.filter = otherUser.userId;
-          item.textContent = otherUser.displayName;
+          item.style.display = 'flex';
+          item.style.alignItems = 'center';
+          item.innerHTML = avatarHtml + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(otherUser.displayName) + '</span>';
 
           if (currentDiaryFilter === otherUser.userId) {
             item.classList.add('active');
@@ -400,13 +409,18 @@ function renderImagePreview() {
 
 function openWriteModal() {
   var now = new Date();
+  var year = now.getFullYear();
+  var month = String(now.getMonth() + 1).padStart(2, '0');
+  var day = String(now.getDate()).padStart(2, '0');
+  var hours = String(now.getHours()).padStart(2, '0');
+  var minutes = String(now.getMinutes()).padStart(2, '0');
   selectedImageFiles = [];
   document.getElementById('writeModal').classList.remove('hidden');
   document.getElementById('diaryId').value = '';
   document.getElementById('diaryTitle').value = '';
   document.getElementById('diaryContent').value = '';
-  document.getElementById('diaryDate').value = now.toISOString().split('T')[0];
-  document.getElementById('diaryTime').value = now.toTimeString().slice(0, 5);
+  document.getElementById('diaryDate').value = year + '-' + month + '-' + day;
+  document.getElementById('diaryTime').value = hours + ':' + minutes;
   document.getElementById('diaryVisibility').value = 'private';
   document.getElementById('shareSelectRow').classList.add('hidden');
   document.getElementById('diaryImage').value = '';

@@ -567,61 +567,168 @@ async function showDiaryDetail(diaryId, isMine, isCoAuthor) {
 }
 
 // 加载评论
+var currentDiaryIdForComment = null;
 async function loadComments(diaryId) {
+  currentDiaryIdForComment = diaryId;
   var commentsList = document.getElementById('commentsList');
   commentsList.innerHTML = '<div style="font-size:13px;color:var(--text-muted);text-align:center;padding:20px;">加载中...</div>';
+
+  var diaryDoc = await db.collection('diaries').doc(diaryId).get();
+  var diaryOwnerId = diaryDoc.exists ? diaryDoc.data().userId : '';
 
   try {
     var snapshot = await db.collection('comments')
       .where('diaryId', '==', diaryId)
-      .orderBy('createdAt', 'asc')
       .get();
 
     if (snapshot.empty) {
       commentsList.innerHTML = '<div style="font-size:13px;color:var(--text-muted);text-align:center;padding:20px;">暂无评论</div>';
-      return;
-    }
+    } else {
+      var allDocs = snapshot.docs.sort(function(a, b) {
+        var timeA = a.data().createdAt ? a.data().createdAt.toMillis() : 0;
+        var timeB = b.data().createdAt ? b.data().createdAt.toMillis() : 0;
+        return timeA - timeB;
+      });
 
-    commentsList.innerHTML = '';
-    snapshot.docs.forEach(function(doc) {
-      var comment = doc.data();
-      var time = comment.createdAt ? comment.createdAt.toDate() : new Date();
-      var timeStr = time.getFullYear() + '.' + String(time.getMonth() + 1).padStart(2, '0') + '.' + String(time.getDate()).padStart(2, '0');
-      var avatar = comment.userAvatar || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="%2364b4ff" width="100" height="100" rx="50"/><text y="60" x="50" text-anchor="middle" font-size="40" fill="%23fff">?</text></svg>';
-      var item = document.createElement('div');
-      item.className = 'comment-item';
-      item.innerHTML = '<img class="comment-avatar" src="' + avatar + '"><div class="comment-body"><div class="comment-header"><span class="comment-author">' + escapeHtml(comment.userDisplayName || '匿名') + '</span><span class="comment-time">' + timeStr + '</span></div><div class="comment-content">' + escapeHtml(comment.content) + '</div></div>';
-      commentsList.appendChild(item);
-    });
+      commentsList.innerHTML = '';
+
+      // 构建评论映射
+      var commentMap = {};
+      allDocs.forEach(function(doc) {
+        commentMap[doc.id] = doc;
+      });
+
+      // 计算评论深度
+      function getDepth(commentId, depth) {
+        var comment = commentMap[commentId];
+        if (!comment || !comment.data().parentCommentId) return depth;
+        return getDepth(comment.data().parentCommentId, depth + 1);
+      }
+
+      function renderCommentItem(doc) {
+        var comment = doc.data();
+        var time = comment.createdAt ? comment.createdAt.toDate() : new Date();
+        var timeStr = time.getFullYear() + '.' + String(time.getMonth() + 1).padStart(2, '0') + '.' + String(time.getDate()).padStart(2, '0');
+        var avatar = comment.userAvatar || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="%2364b4ff" width="100" height="100" rx="50"/><text y="60" x="50" text-anchor="middle" font-size="40" fill="%23fff">?</text></svg>';
+
+        var canDelete = currentUser.uid === diaryOwnerId || currentUser.uid === comment.userId;
+
+        var item = document.createElement('div');
+        item.className = 'comment-item';
+        item.dataset.commentId = doc.id;
+        item.innerHTML = '<img class="comment-avatar" src="' + avatar + '"><div class="comment-body"><div class="comment-header"><span class="comment-author">' + escapeHtml(comment.userDisplayName || '匿名') + '</span><span class="comment-time">' + timeStr + '</span></div><div class="comment-content">' + escapeHtml(comment.content) + '</div><div class="comment-actions"><button class="reply-btn" data-id="' + doc.id + '">回复</button>' + (canDelete ? '<button class="delete-comment-btn" data-id="' + doc.id + '">删除</button>' : '') + '</div></div>';
+        return item;
+      }
+
+      // 渲染所有评论，扁平结构
+      allDocs.forEach(function(doc) {
+        var comment = doc.data();
+        var depth = getDepth(doc.id, 0);
+        var item = renderCommentItem(doc);
+
+        if (depth > 0) {
+          item.classList.add('reply-indent');
+          item.style.marginLeft = (depth * 40) + 'px';
+        }
+
+        commentsList.appendChild(item);
+      });
+    }
   } catch (e) {
+    console.error('评论加载失败:', e);
     commentsList.innerHTML = '<div style="font-size:13px;color:var(--text-muted);text-align:center;padding:20px;">评论加载失败</div>';
   }
 
-  // 绑定发送评论
-  document.getElementById('sendCommentBtn').onclick = function() {
-    var input = document.getElementById('commentInput');
-    var content = input.value.trim();
+  var sendBtn = document.getElementById('sendCommentBtn');
+  var input = document.getElementById('commentInput');
+
+  var newSendBtn = sendBtn.cloneNode(true);
+  sendBtn.parentNode.replaceChild(newSendBtn, sendBtn);
+  var newInput = input.cloneNode(true);
+  input.parentNode.replaceChild(newInput, input);
+
+  newSendBtn.onclick = function() {
+    var content = newInput.value.trim();
     if (!content) return;
-    addComment(diaryId, content);
-    input.value = '';
+    addComment(currentDiaryIdForComment, content, null);
+    newInput.value = '';
   };
+  newInput.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      var content = newInput.value.trim();
+      if (!content) return;
+      addComment(currentDiaryIdForComment, content, null);
+      newInput.value = '';
+    }
+  });
+
+  document.querySelectorAll('.reply-btn').forEach(function(btn) {
+    btn.onclick = function() {
+      var commentId = this.dataset.id;
+      var replyContent = prompt('请输入回复内容:');
+      if (replyContent && replyContent.trim()) {
+        addComment(currentDiaryIdForComment, replyContent.trim(), commentId);
+      }
+    };
+  });
+
+  document.querySelectorAll('.delete-comment-btn').forEach(function(btn) {
+    btn.onclick = async function() {
+      var commentId = this.dataset.id;
+      if (confirm('确定删除这条评论吗？')) {
+        await deleteComment(commentId);
+      }
+    };
+  });
 }
 
-// 添加评论
-async function addComment(diaryId, content) {
+// 添加评论或回复
+async function addComment(diaryId, content, parentCommentId) {
   try {
+    // 获取日记主人ID
+    var diaryDoc = await db.collection('diaries').doc(diaryId).get();
+    var diaryOwnerId = diaryDoc.exists ? diaryDoc.data().userId : '';
+
     await db.collection('comments').add({
       diaryId: diaryId,
+      diaryOwnerId: diaryOwnerId,
       userId: currentUser.uid,
       userDisplayName: currentUserData && currentUserData.displayName ? currentUserData.displayName : currentUser.email,
       userAvatar: currentUserData && currentUserData.avatarUrl ? currentUserData.avatarUrl : '',
       content: content,
+      parentCommentId: parentCommentId || null,
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
     loadComments(diaryId);
   } catch (e) {
     console.error('评论发送失败:', e);
     alert('评论发送失败');
+  }
+}
+
+// 删除评论
+async function deleteComment(commentId) {
+  try {
+    // 获取评论信息
+    var commentDoc = await db.collection('comments').doc(commentId).get();
+    if (!commentDoc.exists) return;
+
+    var diaryId = commentDoc.data().diaryId;
+
+    // 删除评论的所有回复
+    var repliesSnapshot = await db.collection('comments').where('parentCommentId', '==', commentId).get();
+    var batch = db.batch();
+    repliesSnapshot.docs.forEach(function(replyDoc) {
+      batch.delete(replyDoc.ref);
+    });
+    batch.delete(commentDoc.ref);
+    await batch.commit();
+
+    loadComments(diaryId);
+  } catch (e) {
+    console.error('删除评论失败:', e);
+    alert('删除评论失败');
   }
 }
 
@@ -637,13 +744,57 @@ function editDiary(diaryId) {
     document.getElementById('diaryContent').value = data.content;
 
     var date = data.date.toDate();
-    document.getElementById('diaryDate').value = date.toISOString().split('T')[0];
+    var year = date.getFullYear();
+    var month = String(date.getMonth() + 1).padStart(2, '0');
+    var day = String(date.getDate()).padStart(2, '0');
+    document.getElementById('diaryDate').value = year + '-' + month + '-' + day;
     document.getElementById('diaryTime').value = data.time || '';
 
     document.getElementById('diaryVisibility').value = data.visibility;
     document.getElementById('diaryCollection').value = data.collectionId || '';
 
+    // 处理共建记录
+    var coAuthors = data.coAuthors || [];
+    if (coAuthors.length > 0) {
+      document.getElementById('coAuthorCheck').checked = true;
+      document.getElementById('coAuthorsHint').style.display = 'block';
+      document.getElementById('coAuthorsList').style.display = 'flex';
+    } else {
+      document.getElementById('coAuthorCheck').checked = false;
+      document.getElementById('coAuthorsHint').style.display = 'none';
+      document.getElementById('coAuthorsList').style.display = 'none';
+    }
+
+    // 处理共享选中
+    var shareSelectRow = document.getElementById('shareSelectRow');
+    shareSelectRow.classList.toggle('hidden', data.visibility !== 'shared');
+
     renderTagOptions(data.tagId);
+
+    // 加载共享用户并选中已选的
+    loadShareUsers().then(function() {
+      var sharedWith = data.sharedWith || [];
+      sharedWith.forEach(function(userId) {
+        var checkbox = document.querySelector('#shareList input[value="' + userId + '"]');
+        if (checkbox) {
+          checkbox.checked = true;
+          checkbox.closest('.share-item').classList.add('selected');
+        }
+      });
+    });
+
+    // 加载共建用户并选中已选的
+    loadCoAuthors().then(function() {
+      coAuthors.forEach(function(userId) {
+        if (userId !== currentUser.uid) {
+          var checkbox = document.querySelector('#coAuthorsList input[value="' + userId + '"]');
+          if (checkbox) {
+            checkbox.checked = true;
+            checkbox.closest('.share-item').classList.add('selected');
+          }
+        }
+      });
+    });
 
     document.getElementById('writeModalTitle').textContent = '编辑记录';
     document.getElementById('writeModal').classList.remove('hidden');
@@ -791,6 +942,10 @@ async function loadShareUsers() {
       var item = document.createElement('label');
       item.className = 'share-item';
       item.innerHTML = '<input type="checkbox" value="' + userId + '"><span>' + (userData.displayName || userData.email) + '</span>';
+      var checkbox = item.querySelector('input');
+      checkbox.addEventListener('change', function() {
+        this.closest('.share-item').classList.toggle('selected', this.checked);
+      });
       shareList.appendChild(item);
     }
   }
@@ -815,6 +970,10 @@ async function loadCoAuthors() {
       var item = document.createElement('label');
       item.className = 'share-item';
       item.innerHTML = '<input type="checkbox" value="' + userId + '"><span>' + (userData.displayName || userData.email) + '</span>';
+      var checkbox = item.querySelector('input');
+      checkbox.addEventListener('change', function() {
+        this.closest('.share-item').classList.toggle('selected', this.checked);
+      });
       coAuthorsList.appendChild(item);
     }
   }

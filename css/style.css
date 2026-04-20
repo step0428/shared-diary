@@ -666,6 +666,10 @@ body {
   color: var(--bg-primary);
 }
 
+.fc .fc-col-header-cell {
+  background: var(--bg-secondary);
+}
+
 .fc .fc-daygrid-day-number,
 .fc .fc-col-header-cell-cushion {
   color: var(--text-secondary);
@@ -1129,6 +1133,40 @@ body {
   font-size: 14px;
   color: var(--text-secondary);
   line-height: 1.5;
+}
+
+.comment-actions {
+  margin-top: 8px;
+  display: flex;
+  gap: 12px;
+}
+
+.reply-btn,
+.delete-comment-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+  font-family: inherit;
+}
+
+.reply-btn:hover,
+.delete-comment-btn:hover {
+  text-decoration: underline;
+}
+
+.delete-comment-btn {
+  color: #ff6b6b;
+}
+
+.reply-indent {
+  margin-bottom: 10px;
+}
+
+.comment-item {
+  margin-bottom: 10px;
 }
 
 .comment-form {

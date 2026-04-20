@@ -476,12 +476,14 @@ async function getLinkUserInfo(linkData, isCreator) {
     return {
       userId: otherUid,
       email: otherUserDoc.data().email,
-      displayName: otherUserDoc.data().displayName || otherUserDoc.data().email
+      displayName: otherUserDoc.data().displayName || otherUserDoc.data().email,
+      avatarUrl: otherUserDoc.data().avatarUrl || ''
     };
   }
   return {
     userId: otherUid,
     email: isCreator ? linkData.userEmail : 'unknown',
-    displayName: isCreator ? (linkData.userDisplayName || linkData.userEmail) : 'unknown'
+    displayName: isCreator ? (linkData.userDisplayName || linkData.userEmail) : 'unknown',
+    avatarUrl: ''
   };
 }

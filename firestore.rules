@@ -14,12 +14,20 @@ service cloud.firestore {
       allow update, delete: if request.auth.uid == resource.data.userId;
     }
 
-    // 链接 - 登录后可读写
+    // 链接 - 登录后可读写，链接双方都可以删除
     match /links/{linkId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null;
       allow update: if request.auth != null;
-      allow delete: if request.auth.uid == resource.data.userId;
+      allow delete: if request.auth.uid == resource.data.userId || resource.data.acceptedBy == request.auth.uid;
+    }
+
+    // 评论 - 登录后可读写，评论作者或日记主人可删除
+    match /comments/{commentId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update: if request.auth.uid == resource.data.userId;
+      allow delete: if request.auth.uid == resource.data.userId || request.auth.uid == resource.data.diaryOwnerId;
     }
   }
 }
