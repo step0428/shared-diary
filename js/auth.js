@@ -48,6 +48,7 @@ async function showMainApp() {
   setupAddTag();
   setupCollectionModal();
   updateCollectionFilter();
+  await loadUserTheme();
   setTimeout(function() { window.checkInviteLink(); }, 500);
 }
 

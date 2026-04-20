@@ -119,7 +119,7 @@ function renderTagManagementList() {
   for (var i = 0; i < userTags.length; i++) {
     var tag = userTags[i];
     var item = document.createElement('div');
-    item.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;';
+    item.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg-tertiary);border-radius:8px;';
 
     var colorInput = document.createElement('input');
     colorInput.type = 'color';
@@ -137,7 +137,7 @@ function renderTagManagementList() {
     var nameInput = document.createElement('input');
     nameInput.type = 'text';
     nameInput.value = tag.name;
-    nameInput.style.cssText = 'flex:1;padding:8px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:rgba(255,255,255,0.9);font-size:14px;font-family:inherit;';
+    nameInput.style.cssText = 'flex:1;padding:8px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);font-size:14px;font-family:inherit;';
     nameInput.addEventListener('input', function(idx) {
       return function(e) {
         userTags[idx].name = e.target.value;
@@ -148,7 +148,7 @@ function renderTagManagementList() {
 
     var deleteBtn = document.createElement('button');
     deleteBtn.textContent = '删除';
-    deleteBtn.style.cssText = 'padding:6px 12px;background:rgba(255,100,100,0.2);border:1px solid rgba(255,100,100,0.4);border-radius:6px;color:rgba(255,255,255,0.8);font-size:12px;cursor:pointer;';
+    deleteBtn.style.cssText = 'padding:6px 12px;background:rgba(255,100,100,0.15);border:1px solid rgba(255,100,100,0.3);border-radius:6px;color:#ff6b6b;font-size:12px;cursor:pointer;';
     deleteBtn.addEventListener('click', function(idx) {
       return function() {
         userTags.splice(idx, 1);
@@ -244,12 +244,12 @@ function renderCollectionList() {
   for (var i = 0; i < userCollections.length; i++) {
     var col = userCollections[i];
     var item = document.createElement('div');
-    item.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;';
+    item.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg-tertiary);border-radius:8px;';
 
     var nameInput = document.createElement('input');
     nameInput.type = 'text';
     nameInput.value = col.name;
-    nameInput.style.cssText = 'flex:1;padding:8px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:rgba(255,255,255,0.9);font-size:14px;font-family:inherit;';
+    nameInput.style.cssText = 'flex:1;padding:8px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);font-size:14px;font-family:inherit;';
     nameInput.addEventListener('input', function(idx, val) {
       userCollections[idx].name = val;
       saveUserCollections();
@@ -257,7 +257,7 @@ function renderCollectionList() {
 
     var deleteBtn = document.createElement('button');
     deleteBtn.textContent = '删除';
-    deleteBtn.style.cssText = 'padding:6px 12px;background:rgba(255,100,100,0.2);border:1px solid rgba(255,100,100,0.4);border-radius:6px;color:rgba(255,255,255,0.8);font-size:12px;cursor:pointer;';
+    deleteBtn.style.cssText = 'padding:6px 12px;background:rgba(255,100,100,0.15);border:1px solid rgba(255,100,100,0.3);border-radius:6px;color:#ff6b6b;font-size:12px;cursor:pointer;';
     deleteBtn.addEventListener('click', function(idx) {
       userCollections.splice(idx, 1);
       saveUserCollections();
@@ -424,7 +424,7 @@ async function loadDiaries() {
         }
       }
 
-      var titleHtml = data.title ? '<div style="font-size:16px;color:rgba(255,255,255,0.95);margin-bottom:8px;">' + escapeHtml(data.title) + '</div>' : '';
+      var titleHtml = data.title ? '<div class="diary-title">' + escapeHtml(data.title) + '</div>' : '';
 
       var item = document.createElement('div');
       item.className = 'diary-item';
@@ -477,13 +477,13 @@ async function showDiaryDetail(diaryId, isMine) {
     }
   }
 
-  var titleHtml = data.title ? '<div style="font-size:22px;color:rgba(255,255,255,0.95);margin-bottom:15px;">' + escapeHtml(data.title) + '</div>' : '';
+  var titleHtml = data.title ? '<div class="diary-title-large">' + escapeHtml(data.title) + '</div>' : '';
 
-  var editBtnHtml = isMine ? '<button id="editDiaryBtn" style="margin-top:20px;margin-right:10px;padding:10px 20px;background:rgba(126,184,218,0.2);border:1px solid rgba(126,184,218,0.4);border-radius:8px;color:rgba(255,255,255,0.9);cursor:pointer;">编辑</button>' : '';
-  var deleteBtnHtml = isMine ? '<button id="deleteDiaryBtn" style="margin-top:20px;padding:10px 20px;background:rgba(255,100,100,0.2);border:1px solid rgba(255,100,100,0.4);border-radius:8px;color:rgba(255,255,255,0.9);cursor:pointer;">删除</button>' : '';
+  var editBtnHtml = isMine ? '<button id="editDiaryBtn" style="margin-top:20px;margin-right:10px;padding:10px 20px;background:var(--accent-light);border:1px solid var(--accent);border-radius:8px;color:var(--accent);cursor:pointer;">编辑</button>' : '';
+  var deleteBtnHtml = isMine ? '<button id="deleteDiaryBtn" style="margin-top:20px;padding:10px 20px;background:rgba(255,100,100,0.2);border:1px solid rgba(255,100,100,0.4);border-radius:8px;color:#ff6b6b;cursor:pointer;">删除</button>' : '';
 
   var content = document.getElementById('diaryDetailContent');
-  content.innerHTML = '<div class="diary-meta"><span>' + dateStr + '</span><span>' + authorName + '</span></div>' + titleHtml + tagHtml + '<div style="margin-top:20px;line-height:2;font-size:15px;">' + escapeHtml(data.content) + '</div>' + (data.imageUrl ? '<img src="' + data.imageUrl + '" alt="" style="max-width:100%;margin-top:20px;border-radius:8px;">' : '') + '<div style="margin-top:15px;">' + editBtnHtml + deleteBtnHtml + '</div>';
+  content.innerHTML = '<div class="diary-meta"><span>' + dateStr + '</span><span>' + authorName + '</span></div>' + titleHtml + tagHtml + '<div class="diary-detail-text">' + escapeHtml(data.content) + '</div>' + (data.imageUrl ? '<img src="' + data.imageUrl + '" alt="" style="max-width:100%;margin-top:20px;border-radius:8px;">' : '') + '<div style="margin-top:15px;">' + editBtnHtml + deleteBtnHtml + '</div>';
 
   if (isMine) {
     document.getElementById('editDiaryBtn').addEventListener('click', function() {

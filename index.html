@@ -35,6 +35,8 @@
 
     <!-- 主应用 -->
     <div class="main-app hidden" id="mainApp">
+      <!-- 粒子特效 -->
+      <canvas id="particles" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0;"></canvas>
       <!-- 顶部导航 -->
       <header class="header">
         <div class="header-left">
@@ -51,6 +53,12 @@
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
               <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+            </svg>
+          </button>
+          <button class="icon-btn" id="themeBtn" title="主题">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="5"/>
+              <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
             </svg>
           </button>
           <button class="icon-btn" id="logoutBtn" title="退出">
@@ -72,7 +80,7 @@
       <!-- 日记视图 -->
       <div class="diary-view" id="diaryView">
         <div class="diary-header">
-          <select id="collectionFilter" style="margin-right:auto;padding:8px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:rgba(255,255,255,0.9);font-size:13px;font-family:inherit;">
+          <select id="collectionFilter" style="margin-right:auto;padding:8px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:13px;font-family:inherit;">
             <option value="" style="color:#000;">全部日记</option>
           </select>
           <button class="write-btn" id="writeBtn">
@@ -164,7 +172,7 @@
           </button>
         </div>
         <div id="tagManagementList" style="display:flex;flex-direction:column;gap:12px;margin-bottom:20px;"></div>
-        <button type="button" id="addTagBtnModal" style="width:100%;padding:12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:rgba(255,255,255,0.7);font-size:14px;cursor:pointer;">+ 添加标签</button>
+        <button type="button" id="addTagBtnModal" style="width:100%;padding:12px;background:var(--accent-light);border:1px solid var(--accent);border-radius:8px;color:var(--accent);font-size:14px;cursor:pointer;">+ 添加标签</button>
       </div>
     </div>
 
@@ -183,8 +191,8 @@
         </div>
         <div id="collectionList" style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px;"></div>
         <div style="display:flex;gap:10px;">
-          <input type="text" id="newCollectionName" placeholder="新合集名称" style="flex:1;padding:12px 14px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:rgba(255,255,255,0.9);font-size:14px;font-family:inherit;">
-          <button type="button" id="addCollectionBtn" style="padding:12px 20px;background:rgba(126,184,218,0.2);border:1px solid rgba(126,184,218,0.4);border-radius:8px;color:rgba(255,255,255,0.9);font-size:14px;cursor:pointer;">添加</button>
+          <input type="text" id="newCollectionName" placeholder="新合集名称" style="flex:1;padding:12px 14px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:14px;font-family:inherit;">
+          <button type="button" id="addCollectionBtn" style="padding:12px 20px;background:var(--accent-light);border:1px solid var(--accent);border-radius:8px;color:var(--accent);font-size:14px;cursor:pointer;">添加</button>
         </div>
       </div>
     </div>
@@ -233,6 +241,48 @@
           </svg>
         </button>
         <div class="diary-detail-content" id="diaryDetailContent"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 主题选择弹窗 -->
+  <div class="modal hidden" id="themeModal">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content" style="max-width:400px;">
+      <div class="modal-header">
+        <h3>选择主题</h3>
+        <button class="modal-close" id="closeThemeModal">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+        <button class="theme-option" data-theme="default" style="padding:15px;border-radius:10px;border:2px solid rgba(100,180,255,0.3);background:linear-gradient(135deg,#0a0a12,#1a2a3a);cursor:pointer;transition:all 0.2s;">
+          <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#64b4ff,#5a9ec4);margin:0 auto 8px;"></div>
+          <div style="color:rgba(255,255,255,0.8);font-size:12px;">深空蓝</div>
+        </button>
+        <button class="theme-option" data-theme="light" style="padding:15px;border-radius:10px;border:2px solid rgba(0,0,0,0.15);background:linear-gradient(135deg,#f8fafc,#e8eef3);cursor:pointer;transition:all 0.2s;">
+          <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#606060,#808080);margin:0 auto 8px;"></div>
+          <div style="color:rgba(30,40,50,0.85);font-size:12px;">极简白</div>
+        </button>
+        <button class="theme-option" data-theme="gold" style="padding:15px;border-radius:10px;border:2px solid rgba(255,215,0,0.4);background:linear-gradient(135deg,#0a0808,#1a1510);cursor:pointer;transition:all 0.2s;">
+          <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#d4af37,#ffd700);margin:0 auto 8px;"></div>
+          <div style="color:rgba(255,248,235,0.85);font-size:12px;">黑金</div>
+        </button>
+        <button class="theme-option" data-theme="warm" style="padding:15px;border-radius:10px;border:2px solid rgba(255,150,175,0.35);background:linear-gradient(135deg,#ffe8ed,#ffd0dc);cursor:pointer;transition:all 0.2s;">
+          <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#ff8faa,#ffb6c1);margin:0 auto 8px;"></div>
+          <div style="color:rgba(80,40,50,0.85);font-size:12px;">马卡龙</div>
+        </button>
+        <button class="theme-option" data-theme="sky" style="padding:15px;border-radius:10px;border:2px solid rgba(93,173,226,0.35);background:linear-gradient(135deg,#e8f4fc,#d0e8f0);cursor:pointer;transition:all 0.2s;">
+          <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#5DADE2,#87ceeb);margin:0 auto 8px;"></div>
+          <div style="color:rgba(30,50,70,0.85);font-size:12px;">浅蓝</div>
+        </button>
+        <button class="theme-option" data-theme="green" style="padding:15px;border-radius:10px;border:2px solid rgba(80,200,120,0.35);background:linear-gradient(135deg,#e8fff0,#c8f0d8);cursor:pointer;transition:all 0.2s;">
+          <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#52c97a,#7dd99a);margin:0 auto 8px;"></div>
+          <div style="color:rgba(30,60,40,0.85);font-size:12px;">春和景明</div>
+        </button>
       </div>
     </div>
   </div>

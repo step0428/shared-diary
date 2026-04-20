@@ -10,7 +10,9 @@ function initApp() {
   setupLinkManagement();
   setupViewTabs();
   setupCollectionModal();
+  setupTheme();
   initCalendar();
+  initParticles();
 
   // 隐藏加载动画
   setTimeout(function() {
@@ -73,6 +75,10 @@ function setupModal() {
 
   document.getElementById('closeLinkModal').addEventListener('click', function() {
     document.getElementById('linkModal').classList.add('hidden');
+  });
+
+  document.getElementById('closeThemeModal').addEventListener('click', function() {
+    document.getElementById('themeModal').classList.add('hidden');
   });
 
   document.querySelectorAll('.modal-backdrop').forEach(function(backdrop) {
@@ -302,4 +308,130 @@ function setupViewTabs() {
       }
     });
   });
+}
+
+// 设置主题
+function setupTheme() {
+  document.getElementById('themeBtn').addEventListener('click', function() {
+    document.getElementById('themeModal').classList.remove('hidden');
+  });
+
+  document.querySelectorAll('.theme-option').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var theme = btn.dataset.theme;
+      applyTheme(theme);
+      saveUserTheme(theme);
+      document.getElementById('themeModal').classList.add('hidden');
+    });
+  });
+}
+
+// 应用主题
+function applyTheme(theme) {
+  document.body.dataset.theme = theme;
+}
+
+// 保存主题到 Firebase
+function saveUserTheme(theme) {
+  if (currentUser) {
+    db.collection('users').doc(currentUser.uid).update({
+      theme: theme
+    });
+  }
+}
+
+// 加载用户主题
+async function loadUserTheme() {
+  if (!currentUser) return;
+  try {
+    var userDoc = await db.collection('users').doc(currentUser.uid).get();
+    if (userDoc.exists && userDoc.data().theme) {
+      applyTheme(userDoc.data().theme);
+    }
+  } catch (e) {
+    console.error('加载主题失败:', e);
+  }
+}
+
+// 粒子特效
+function initParticles() {
+  var canvas = document.getElementById('particles');
+  var ctx = canvas.getContext('2d');
+  var particles = [];
+  var isLightTheme = false;
+
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+
+  function getParticleColor() {
+    var theme = document.body.dataset.theme || 'default';
+    if (theme === 'light') {
+      return { r: 120, g: 120, b: 125, a: 0.25 };
+    } else if (theme === 'gold') {
+      return { r: 255, g: 215, b: 0, a: 0.5 };
+    } else if (theme === 'warm') {
+      return { r: 255, g: 180, b: 195, a: 0.45 };
+    } else if (theme === 'sky') {
+      return { r: 100, g: 160, b: 220, a: 0.35 };
+    } else if (theme === 'green') {
+      return { r: 100, g: 200, b: 140, a: 0.4 };
+    }
+    return { r: 100, g: 180, b: 255, a: 0.5 };
+  }
+
+  function createParticle() {
+    var color = getParticleColor();
+    return {
+      x: Math.random() * canvas.width,
+      y: canvas.height + 10,
+      size: Math.random() * 3 + 1,
+      speedY: Math.random() * 0.5 + 0.2,
+      speedX: (Math.random() - 0.5) * 0.3,
+      opacity: Math.random() * 0.5 + 0.3,
+      color: color
+    };
+  }
+
+  function updateParticle(p) {
+    p.y -= p.speedY;
+    p.x += p.speedX;
+    p.opacity -= 0.001;
+  }
+
+  function drawParticle(p) {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(' + p.color.r + ',' + p.color.g + ',' + p.color.b + ',' + (p.opacity * p.color.a) + ')';
+    ctx.fill();
+  }
+
+  function animate() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (particles.length < 80) {
+      particles.push(createParticle());
+    }
+
+    for (var i = particles.length - 1; i >= 0; i--) {
+      updateParticle(particles[i]);
+      drawParticle(particles[i]);
+      if (particles[i].y < -10 || particles[i].opacity <= 0) {
+        particles.splice(i, 1);
+      }
+    }
+
+    requestAnimationFrame(animate);
+  }
+
+  resize();
+  window.addEventListener('resize', resize);
+  animate();
+
+  // 主题变化时更新粒子颜色
+  var observer = new MutationObserver(function() {
+    particles = [];
+  });
+  observer.observe(document.body, { attributes: true, attributeFilter: ['data-theme'] });
 }

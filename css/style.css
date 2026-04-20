@@ -4,17 +4,128 @@
   box-sizing: border-box;
 }
 
-:root {
-  --tag-bg-color: rgba(126, 184, 218, 0.15);
-  --tag-border-color: #7eb8da;
-  --tag-text-color: #7eb8da;
+/* 主题色板 */
+:root,
+[data-theme="default"] {
+  --tag-bg-color: rgba(100, 180, 255, 0.15);
+  --tag-border-color: #64b4ff;
+  --tag-text-color: #64b4ff;
+  --bg-primary: linear-gradient(180deg, #0d1a2d 0%, #1a2847 50%, #0d1a2d 100%);
+  --bg-secondary: rgba(20, 40, 70, 0.9);
+  --bg-tertiary: rgba(100, 180, 255, 0.05);
+  --bg-hover: rgba(100, 180, 255, 0.1);
+  --accent: #64b4ff;
+  --accent-light: rgba(100, 180, 255, 0.15);
+  --accent-dark: rgba(100, 180, 255, 0.3);
+  --text-primary: rgba(255, 255, 255, 0.95);
+  --text-secondary: rgba(255, 255, 255, 0.6);
+  --text-muted: rgba(255, 255, 255, 0.4);
+  --border: rgba(100, 180, 255, 0.15);
+  --border-hover: rgba(100, 180, 255, 0.3);
+  --shadow: rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="light"] {
+  --tag-bg-color: rgba(100, 100, 100, 0.1);
+  --tag-border-color: #606060;
+  --tag-text-color: #505050;
+  --bg-primary: linear-gradient(180deg, #f8fafc 0%, #f0f4f8 40%, #e8eef3 100%);
+  --bg-secondary: rgba(255, 255, 255, 0.98);
+  --bg-tertiary: rgba(0, 0, 0, 0.04);
+  --bg-hover: rgba(0, 0, 0, 0.06);
+  --accent: #606060;
+  --accent-light: rgba(80, 80, 80, 0.1);
+  --accent-dark: rgba(60, 60, 60, 0.2);
+  --text-primary: rgba(30, 40, 50, 0.92);
+  --text-secondary: rgba(30, 40, 50, 0.65);
+  --text-muted: rgba(30, 40, 50, 0.45);
+  --border: rgba(0, 0, 0, 0.12);
+  --border-hover: rgba(0, 0, 0, 0.25);
+  --shadow: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="gold"] {
+  --tag-bg-color: rgba(212, 175, 55, 0.12);
+  --tag-border-color: #ffd700;
+  --tag-text-color: #ffd700;
+  --bg-primary: linear-gradient(180deg, #0a0808 0%, #1a1510 50%, #0a0808 100%);
+  --bg-secondary: rgba(30, 25, 15, 0.95);
+  --bg-tertiary: rgba(212, 175, 55, 0.05);
+  --bg-hover: rgba(212, 175, 55, 0.1);
+  --accent: #ffd700;
+  --accent-light: rgba(212, 175, 55, 0.12);
+  --accent-dark: rgba(255, 215, 0, 0.25);
+  --text-primary: rgba(255, 248, 235, 0.95);
+  --text-secondary: rgba(255, 235, 200, 0.6);
+  --text-muted: rgba(255, 215, 150, 0.4);
+  --border: rgba(212, 175, 55, 0.2);
+  --border-hover: rgba(255, 215, 0, 0.4);
+  --shadow: rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="warm"] {
+  --tag-bg-color: rgba(255, 182, 193, 0.25);
+  --tag-border-color: #ff8faa;
+  --tag-text-color: #e86b7d;
+  --bg-primary: linear-gradient(180deg, #fff5f7 0%, #ffe8ed 25%, #ffdce3 50%, #ffd0dc 75%, #ffc4d5 100%);
+  --bg-secondary: rgba(255, 250, 252, 0.97);
+  --bg-tertiary: rgba(255, 150, 175, 0.08);
+  --bg-hover: rgba(255, 140, 165, 0.12);
+  --accent: #e86b7d;
+  --accent-light: rgba(255, 182, 193, 0.25);
+  --accent-dark: rgba(232, 107, 125, 0.3);
+  --text-primary: rgba(60, 30, 40, 0.9);
+  --text-secondary: rgba(60, 30, 40, 0.6);
+  --text-muted: rgba(60, 30, 40, 0.4);
+  --border: rgba(255, 150, 175, 0.25);
+  --border-hover: rgba(232, 107, 125, 0.45);
+  --shadow: rgba(200, 120, 140, 0.12);
+}
+
+[data-theme="sky"] {
+  --tag-bg-color: rgba(135, 206, 235, 0.2);
+  --tag-border-color: #5DADE2;
+  --tag-text-color: #2980b9;
+  --bg-primary: linear-gradient(180deg, #f0f8ff 0%, #e0f0fa 40%, #d0e8f5 100%);
+  --bg-secondary: rgba(255, 255, 255, 0.98);
+  --bg-tertiary: rgba(93, 173, 226, 0.06);
+  --bg-hover: rgba(93, 173, 226, 0.1);
+  --accent: #2980b9;
+  --accent-light: rgba(135, 206, 235, 0.2);
+  --accent-dark: rgba(41, 128, 185, 0.25);
+  --text-primary: rgba(30, 50, 70, 0.9);
+  --text-secondary: rgba(30, 50, 70, 0.6);
+  --text-muted: rgba(30, 50, 70, 0.4);
+  --border: rgba(93, 173, 226, 0.25);
+  --border-hover: rgba(41, 128, 185, 0.4);
+  --shadow: rgba(52, 152, 219, 0.1);
+}
+
+[data-theme="green"] {
+  --tag-bg-color: rgba(80, 200, 120, 0.15);
+  --tag-border-color: #52c97a;
+  --tag-text-color: #3da866;
+  --bg-primary: linear-gradient(180deg, #f0fff4 0%, #e3f7ec 30%, #c8f0d8 60%, #b8ead0 100%);
+  --bg-secondary: rgba(255, 255, 255, 0.98);
+  --bg-tertiary: rgba(80, 200, 120, 0.06);
+  --bg-hover: rgba(80, 200, 120, 0.1);
+  --accent: #3da866;
+  --accent-light: rgba(80, 200, 120, 0.15);
+  --accent-dark: rgba(61, 168, 102, 0.25);
+  --text-primary: rgba(30, 60, 40, 0.9);
+  --text-secondary: rgba(30, 60, 40, 0.6);
+  --text-muted: rgba(30, 60, 40, 0.4);
+  --border: rgba(80, 200, 120, 0.25);
+  --border-hover: rgba(61, 168, 102, 0.4);
+  --shadow: rgba(61, 168, 102, 0.1);
 }
 
 body {
   min-height: 100vh;
-  background: linear-gradient(to bottom, #0a0a12 0%, #0d1520 40%, #0a1a2a 100%);
+  background: var(--bg-primary);
   font-family: 'Noto Serif SC', serif;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--text-primary);
+  transition: background 0.3s, color 0.3s;
 }
 
 .hidden { display: none !important; }
@@ -57,15 +168,15 @@ body {
 .modal-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(5px);
 }
 
 .modal-content {
   position: relative;
-  background: rgba(15, 25, 40, 0.9);
+  background: var(--bg-secondary);
   backdrop-filter: blur(30px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border);
   border-radius: 16px;
   padding: 30px;
   max-width: 500px;
@@ -84,20 +195,20 @@ body {
 .modal-header h3 {
   font-size: 18px;
   font-weight: 400;
-  color: rgba(255, 255, 255, 0.95);
+  color: var(--text-primary);
 }
 
 .modal-close {
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--text-muted);
   cursor: pointer;
   padding: 5px;
   transition: color 0.3s;
 }
 
 .modal-close:hover {
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--accent);
 }
 
 /* 认证页 */
@@ -107,6 +218,7 @@ body {
   align-items: center;
   justify-content: center;
   padding: 20px;
+  background: var(--bg-primary);
 }
 
 .auth-box {
@@ -119,12 +231,12 @@ body {
   font-size: 28px;
   font-weight: 300;
   margin-bottom: 10px;
-  color: rgba(255, 255, 255, 0.95);
+  color: var(--text-primary);
 }
 
 .auth-subtitle {
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--text-muted);
   margin-bottom: 40px;
 }
 
@@ -137,7 +249,7 @@ body {
 .auth-tab {
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--text-muted);
   font-size: 16px;
   font-family: inherit;
   cursor: pointer;
@@ -147,8 +259,8 @@ body {
 }
 
 .auth-tab.active {
-  color: rgba(255, 255, 255, 0.9);
-  border-bottom-color: rgba(126, 184, 218, 0.6);
+  color: var(--accent);
+  border-bottom-color: var(--accent);
 }
 
 .auth-form {
@@ -159,10 +271,10 @@ body {
 
 .auth-form input {
   padding: 14px 18px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
   border-radius: 10px;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--text-primary);
   font-size: 15px;
   font-family: inherit;
   transition: all 0.3s;
@@ -170,21 +282,21 @@ body {
 
 .auth-form input:focus {
   outline: none;
-  border-color: rgba(126, 184, 218, 0.5);
-  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--accent);
+  background: var(--bg-hover);
 }
 
 .auth-form input::placeholder {
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--text-muted);
 }
 
 .auth-btn {
   margin-top: 10px;
   padding: 14px;
-  background: rgba(126, 184, 218, 0.2);
-  border: 1px solid rgba(126, 184, 218, 0.4);
+  background: var(--accent-light);
+  border: 1px solid var(--accent);
   border-radius: 10px;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--accent);
   font-size: 15px;
   font-family: inherit;
   cursor: pointer;
@@ -192,8 +304,8 @@ body {
 }
 
 .auth-btn:hover {
-  background: rgba(126, 184, 218, 0.3);
-  border-color: rgba(126, 184, 218, 0.6);
+  background: var(--accent);
+  color: var(--bg-primary);
 }
 
 .auth-error {
@@ -213,13 +325,13 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: 20px 30px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--border);
 }
 
 .app-title {
   font-size: 18px;
   font-weight: 300;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--text-primary);
 }
 
 .header-right {
@@ -230,14 +342,14 @@ body {
 
 .user-name {
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--text-secondary);
 }
 
 .icon-btn {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
   border-radius: 10px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--text-secondary);
   cursor: pointer;
   padding: 10px;
   display: flex;
@@ -247,8 +359,9 @@ body {
 }
 
 .icon-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.9);
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
+  color: var(--accent);
 }
 
 /* 视图切换 */
@@ -257,13 +370,13 @@ body {
   justify-content: center;
   gap: 40px;
   padding: 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--border);
 }
 
 .view-tab {
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--text-muted);
   font-size: 15px;
   font-family: inherit;
   cursor: pointer;
@@ -273,8 +386,8 @@ body {
 }
 
 .view-tab.active {
-  color: rgba(255, 255, 255, 0.9);
-  border-bottom-color: rgba(126, 184, 218, 0.6);
+  color: var(--accent);
+  border-bottom-color: var(--accent);
 }
 
 /* 日记视图 */
@@ -295,10 +408,10 @@ body {
   align-items: center;
   gap: 8px;
   padding: 12px 24px;
-  background: rgba(126, 184, 218, 0.15);
-  border: 1px solid rgba(126, 184, 218, 0.3);
+  background: var(--accent-light);
+  border: 1px solid var(--accent);
   border-radius: 25px;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--accent);
   font-size: 14px;
   font-family: inherit;
   cursor: pointer;
@@ -306,8 +419,8 @@ body {
 }
 
 .write-btn:hover {
-  background: rgba(126, 184, 218, 0.25);
-  border-color: rgba(126, 184, 218, 0.5);
+  background: var(--accent);
+  color: var(--bg-primary);
 }
 
 .diary-list {
@@ -317,8 +430,8 @@ body {
 }
 
 .diary-item {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
   border-radius: 12px;
   padding: 20px 22px;
   cursor: pointer;
@@ -326,8 +439,8 @@ body {
 }
 
 .diary-item:hover {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.12);
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
 }
 
 .diary-item-header {
@@ -339,26 +452,26 @@ body {
 
 .diary-date {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--text-muted);
 }
 
 .diary-author {
   font-size: 12px;
-  color: rgba(126, 184, 218, 0.7);
+  color: var(--accent);
 }
 
 .diary-visibility {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.25);
+  color: var(--text-muted);
   padding: 3px 8px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bg-tertiary);
   border-radius: 10px;
 }
 
 .diary-preview {
   font-size: 14px;
   line-height: 1.8;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
@@ -373,6 +486,25 @@ body {
   object-fit: cover;
 }
 
+.diary-title {
+  font-size: 16px;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.diary-title-large {
+  font-size: 22px;
+  color: var(--text-primary);
+  margin-bottom: 15px;
+}
+
+.diary-detail-text {
+  margin-top: 20px;
+  line-height: 2;
+  font-size: 15px;
+  color: var(--text-primary);
+}
+
 /* 日历视图 */
 .calendar-view {
   max-width: 900px;
@@ -381,49 +513,57 @@ body {
 }
 
 .calendar-container {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
   border-radius: 12px;
   padding: 20px;
 }
 
 .fc {
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--text-primary);
 }
 
 .fc .fc-toolbar-title {
   font-size: 18px;
   font-weight: 400;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--text-primary);
 }
 
 .fc .fc-button {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: rgba(255, 255, 255, 0.8);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
   font-family: inherit;
   font-size: 13px;
   padding: 8px 14px;
 }
 
 .fc .fc-button:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
 }
 
 .fc .fc-button-primary:disabled {
-  background: rgba(126, 184, 218, 0.3);
-  border-color: rgba(126, 184, 218, 0.4);
-  color: rgba(255, 255, 255, 0.9);
+  background: var(--accent-light);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.fc .fc-button-primary:not(:disabled).fc-button-active,
+.fc .fc-button-primary:not(:disabled):active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg-primary);
 }
 
 .fc .fc-daygrid-day-number,
 .fc .fc-col-header-cell-cushion {
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
   text-decoration: none;
 }
 
 .fc .fc-daygrid-day.fc-day-today {
-  background: rgba(126, 184, 218, 0.1);
+  background: var(--accent-light);
 }
 
 .fc .fc-event {
@@ -440,7 +580,7 @@ body {
 
 .fc .fc-timegrid-slot-label,
 .fc .fc-col-header-cell-cushion {
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
 }
 
 .fc .fc-timegrid-event .fc-event-title,
@@ -453,12 +593,12 @@ body {
 }
 
 .fc .fc-scrollgrid {
-  border-color: rgba(255, 255, 255, 0.06);
+  border-color: var(--border);
 }
 
 .fc .fc-scrollgrid td,
 .fc .fc-scrollgrid th {
-  border-color: rgba(255, 255, 255, 0.06);
+  border-color: var(--border);
 }
 
 /* 写日记表单 */
@@ -472,10 +612,10 @@ body {
   width: 100%;
   min-height: 200px;
   padding: 16px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
   border-radius: 10px;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--text-primary);
   font-size: 15px;
   font-family: inherit;
   line-height: 1.8;
@@ -484,11 +624,11 @@ body {
 
 .write-form textarea:focus {
   outline: none;
-  border-color: rgba(126, 184, 218, 0.5);
+  border-color: var(--accent);
 }
 
 .write-form textarea::placeholder {
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--text-muted);
 }
 
 .form-row {
@@ -499,36 +639,36 @@ body {
 
 .form-row label {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--text-secondary);
 }
 
 .form-row input[type="date"],
 .form-row input[type="text"],
 .form-row select {
   padding: 12px 14px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
   border-radius: 8px;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--text-primary);
   font-size: 14px;
   font-family: inherit;
 }
 
 .form-row select option {
-  background: rgba(255, 255, 255, 0.95);
-  color: rgba(0, 0, 0, 0.9);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
 }
 
 .form-row input[type="date"]:focus,
 .form-row input[type="text"]:focus,
 .form-row select:focus {
   outline: none;
-  border-color: rgba(126, 184, 218, 0.5);
+  border-color: var(--accent);
 }
 
 .form-row input[type="file"] {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--text-secondary);
 }
 
 .share-list {
@@ -542,20 +682,20 @@ body {
   align-items: center;
   gap: 8px;
   padding: 8px 14px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
   border-radius: 20px;
   cursor: pointer;
   transition: all 0.3s;
 }
 
 .share-item:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--bg-hover);
 }
 
 .share-item.selected {
-  background: rgba(126, 184, 218, 0.2);
-  border-color: rgba(126, 184, 218, 0.4);
+  background: var(--accent-light);
+  border-color: var(--accent);
 }
 
 .share-item input {
@@ -564,15 +704,15 @@ body {
 
 .share-item span {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
 }
 
 .submit-btn {
   padding: 14px;
-  background: rgba(126, 184, 218, 0.2);
-  border: 1px solid rgba(126, 184, 218, 0.4);
+  background: var(--accent-light);
+  border: 1px solid var(--accent);
   border-radius: 10px;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--accent);
   font-size: 15px;
   font-family: inherit;
   cursor: pointer;
@@ -580,8 +720,8 @@ body {
 }
 
 .submit-btn:hover {
-  background: rgba(126, 184, 218, 0.3);
-  border-color: rgba(126, 184, 218, 0.6);
+  background: var(--accent);
+  color: var(--bg-primary);
 }
 
 /* 链接管理 */
@@ -596,22 +736,22 @@ body {
 .link-section h4 {
   font-size: 14px;
   font-weight: 400;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
   margin-bottom: 12px;
 }
 
 .link-hint {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--text-muted);
   margin-bottom: 15px;
 }
 
 .create-link-btn {
   padding: 12px 24px;
-  background: rgba(126, 184, 218, 0.15);
-  border: 1px solid rgba(126, 184, 218, 0.3);
+  background: var(--accent-light);
+  border: 1px solid var(--accent);
   border-radius: 25px;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--accent);
   font-size: 14px;
   font-family: inherit;
   cursor: pointer;
@@ -619,8 +759,8 @@ body {
 }
 
 .create-link-btn:hover {
-  background: rgba(126, 184, 218, 0.25);
-  border-color: rgba(126, 184, 218, 0.5);
+  background: var(--accent);
+  color: var(--bg-primary);
 }
 
 .link-result {
@@ -632,19 +772,19 @@ body {
 .link-result input {
   flex: 1;
   padding: 12px 14px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
   border-radius: 8px;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--text-primary);
   font-size: 13px;
 }
 
 .copy-btn {
   padding: 12px 20px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
   border-radius: 8px;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--text-secondary);
   font-size: 13px;
   font-family: inherit;
   cursor: pointer;
@@ -652,7 +792,8 @@ body {
 }
 
 .copy-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
 }
 
 .pending-links,
@@ -668,8 +809,8 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: 14px 16px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
   border-radius: 10px;
 }
 
@@ -683,13 +824,13 @@ body {
 .pending-item .user-email,
 .linked-item .user-email {
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
 }
 
 .pending-item .user-status,
 .linked-item .user-status {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--text-muted);
 }
 
 .accept-btn,
@@ -704,37 +845,38 @@ body {
 }
 
 .accept-btn {
-  background: rgba(126, 184, 218, 0.2);
-  border: 1px solid rgba(126, 184, 218, 0.4);
-  color: rgba(255, 255, 255, 0.9);
+  background: var(--accent-light);
+  border: 1px solid var(--accent);
+  color: var(--accent);
 }
 
 .accept-btn:hover {
-  background: rgba(126, 184, 218, 0.3);
+  background: var(--accent);
+  color: var(--bg-primary);
 }
 
 .reject-btn {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.6);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
 }
 
 .reject-btn:hover {
   background: rgba(255, 100, 100, 0.15);
-  border-color: rgba(255, 100, 100, 0.3);
-  color: rgba(255, 255, 255, 0.9);
+  border-color: rgba(255, 100, 100, 0.4);
+  color: #ff6b6b;
 }
 
 .unlink-btn {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.6);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
 }
 
 .unlink-btn:hover {
   background: rgba(255, 100, 100, 0.15);
-  border-color: rgba(255, 100, 100, 0.3);
-  color: rgba(255, 255, 255, 0.9);
+  border-color: rgba(255, 100, 100, 0.4);
+  color: #ff6b6b;
 }
 
 /* 日记详情 */
@@ -745,7 +887,7 @@ body {
 .diary-detail-content {
   font-size: 15px;
   line-height: 2;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--text-primary);
   white-space: pre-wrap;
 }
 
@@ -760,19 +902,19 @@ body {
   gap: 15px;
   margin-bottom: 25px;
   padding-bottom: 15px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--border);
 }
 
 .diary-meta span {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--text-muted);
 }
 
 /* 空状态 */
 .empty-state {
   text-align: center;
   padding: 60px 20px;
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--text-muted);
   font-size: 14px;
 }
 
