@@ -4,6 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>久刹</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="久刹">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%230a0a12' width='100' height='100' rx='20'/><text y='65' x='50' text-anchor='middle' font-size='50' fill='%2364b4ff'>久</text></svg>">
   <link rel="stylesheet" href="css/style.css">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400&display=swap" rel="stylesheet">
 </head>
@@ -115,25 +120,25 @@
         </div>
         <form class="write-form" id="writeForm">
           <input type="hidden" id="diaryId" value="">
-          <input type="text" id="diaryTitle" placeholder="日记标题（选填）" style="width:100%;padding:12px 14px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:rgba(255,255,255,0.9);font-size:15px;font-family:inherit;margin-bottom:15px;">
+          <input type="text" id="diaryTitle" placeholder="日记标题（选填）" style="width:100%;padding:12px 14px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:15px;font-family:inherit;margin-bottom:15px;">
           <textarea id="diaryContent" placeholder="今天发生了什么..." required></textarea>
           <div class="form-row">
-            <label>标签 <button type="button" id="manageTagsBtn" style="margin-left:8px;padding:4px 10px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:10px;color:rgba(255,255,255,0.5);font-size:11px;cursor:pointer;">管理</button></label>
+            <label>标签 <button type="button" id="manageTagsBtn" style="margin-left:8px;padding:4px 10px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:10px;color:var(--text-secondary);font-size:11px;cursor:pointer;">管理</button></label>
             <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
               <div id="tagOptions" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
-              <button type="button" id="addTagBtn" style="padding:6px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:15px;color:rgba(255,255,255,0.6);font-size:12px;cursor:pointer;">+ 新标签</button>
+              <button type="button" id="addTagBtn" style="padding:6px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:15px;color:var(--text-secondary);font-size:12px;cursor:pointer;">+ 新标签</button>
             </div>
           </div>
           <div class="form-row">
             <label>日期和时间</label>
             <div style="display:flex;gap:10px;">
-              <input type="date" id="diaryDate" required>
-              <input type="time" id="diaryTime" style="padding:12px 14px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:rgba(255,255,255,0.9);font-size:14px;font-family:inherit;">
+              <input type="date" id="diaryDate" required style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);padding:12px 14px;font-size:14px;font-family:inherit;">
+              <input type="time" id="diaryTime" style="padding:12px 14px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:14px;font-family:inherit;">
             </div>
           </div>
           <div class="form-row">
             <label>合集</label>
-            <select id="diaryCollection" style="padding:12px 14px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:rgba(255,255,255,0.9);font-size:14px;font-family:inherit;width:100%;">
+            <select id="diaryCollection" style="padding:12px 14px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:14px;font-family:inherit;width:100%;">
               <option value="">无</option>
             </select>
           </div>
