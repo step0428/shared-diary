@@ -113,6 +113,7 @@ function setupWriteDiary() {
 function openWriteModal() {
   var now = new Date();
   document.getElementById('writeModal').classList.remove('hidden');
+  document.getElementById('diaryId').value = '';
   document.getElementById('diaryTitle').value = '';
   document.getElementById('diaryContent').value = '';
   document.getElementById('diaryDate').value = now.toISOString().split('T')[0];
