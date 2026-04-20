@@ -352,18 +352,8 @@ body {
   transform: translateX(-100%);
 }
 
-.close-sidebar-btn {
-  position: absolute;
-  top: 15px;
-  right: 10px;
-}
-
 .toggle-sidebar-btn {
   flex-shrink: 0;
-}
-
-.main-app:not(.sidebar-collapsed) .toggle-sidebar-btn {
-  display: none;
 }
 
 .close-sidebar-btn {

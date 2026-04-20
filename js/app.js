@@ -259,15 +259,10 @@ function setupSidebarFilter() {
 // 设置侧边栏展开/收起
 function setupToggleSidebar() {
   var toggleBtn = document.getElementById('toggleSidebarBtn');
-  var closeBtn = document.getElementById('closeSidebarBtn');
   var mainApp = document.getElementById('mainApp');
 
   toggleBtn.addEventListener('click', function() {
-    mainApp.classList.remove('sidebar-collapsed');
-  });
-
-  closeBtn.addEventListener('click', function() {
-    mainApp.classList.add('sidebar-collapsed');
+    mainApp.classList.toggle('sidebar-collapsed');
   });
 }
 
