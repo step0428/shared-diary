@@ -96,10 +96,30 @@ async function showDiaryDetail(diaryId) {
   var date = data.date.toDate();
   var dateStr = date.getFullYear() + '.' + String(date.getMonth() + 1).padStart(2, '0') + '.' + String(date.getDate()).padStart(2, '0');
 
+  var isMyDiary = data.userId === currentUser.uid;
+  var deleteBtnHtml = isMyDiary ? '<button class="diary-delete-btn" id="diaryDeleteBtn" style="margin-top:20px;padding:10px 20px;background:rgba(255,100,100,0.2);border:1px solid rgba(255,100,100,0.4);border-radius:8px;color:rgba(255,255,255,0.9);cursor:pointer;">删除日记</button>' : '';
+
   var content = document.getElementById('diaryDetailContent');
-  content.innerHTML = '<div class="diary-meta"><span>' + dateStr + '</span><span>' + authorName + '</span></div>' + escapeHtml(data.content) + (data.imageUrl ? '<img src="' + data.imageUrl + '" alt="">' : '');
+  content.innerHTML = '<div class="diary-meta"><span>' + dateStr + '</span><span>' + authorName + '</span></div>' + escapeHtml(data.content) + (data.imageUrl ? '<img src="' + data.imageUrl + '" alt="" style="max-width:100%;margin-top:15px;border-radius:8px;">' : '') + deleteBtnHtml;
+
+  // 添加删除事件
+  var deleteBtn = document.getElementById('diaryDeleteBtn');
+  if (deleteBtn) {
+    deleteBtn.addEventListener('click', function() {
+      if (confirm('确定要删除这篇日记吗？')) {
+        deleteDiary(diaryId);
+      }
+    });
+  }
 
   document.getElementById('diaryModal').classList.remove('hidden');
+}
+
+// 删除日记
+async function deleteDiary(diaryId) {
+  await db.collection('diaries').doc(diaryId).delete();
+  document.getElementById('diaryModal').classList.add('hidden');
+  loadDiaries();
 }
 
 // Cloudinary 配置
