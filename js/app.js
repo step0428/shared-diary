@@ -263,7 +263,7 @@ function setupToggleSidebar() {
   var mainApp = document.getElementById('mainApp');
 
   toggleBtn.addEventListener('click', function() {
-    mainApp.classList.toggle('sidebar-collapsed');
+    mainApp.classList.remove('sidebar-collapsed');
   });
 
   closeBtn.addEventListener('click', function() {

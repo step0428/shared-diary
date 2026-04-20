@@ -47,7 +47,7 @@
       <canvas id="particles" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0;"></canvas>
       <!-- 左侧朋友栏 -->
       <div class="friend-sidebar" id="friendSidebar">
-        <button class="icon-btn" id="closeSidebarBtn" title="收起侧边栏" style="position:absolute;top:15px;right:10px;">
+        <button class="icon-btn close-sidebar-btn" id="closeSidebarBtn" title="收起侧边栏">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="3" y1="12" x2="21" y2="12"/>
             <line x1="3" y1="6" x2="21" y2="6"/>
@@ -60,17 +60,16 @@
         <div class="friend-divider">朋友</div>
         <div id="friendList"></div>
       </div>
-      <!-- 侧边栏切换按钮 -->
-      <button class="icon-btn toggle-sidebar-fixed" id="toggleSidebarBtn" title="展开侧边栏">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="3" y1="12" x2="21" y2="12"/>
-          <line x1="3" y1="6" x2="21" y2="6"/>
-          <line x1="3" y1="18" x2="21" y2="18"/>
-        </svg>
-      </button>
       <!-- 顶部导航 -->
       <header class="header">
         <div class="header-left">
+          <button class="icon-btn toggle-sidebar-btn" id="toggleSidebarBtn" title="展开侧边栏">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="3" y1="12" x2="21" y2="12"/>
+              <line x1="3" y1="6" x2="21" y2="6"/>
+              <line x1="3" y1="18" x2="21" y2="18"/>
+            </svg>
+          </button>
           <h2 class="app-title">久刹</h2>
         </div>
         <div class="header-right">
