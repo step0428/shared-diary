@@ -9,6 +9,7 @@ function initApp() {
   setupWriteDiary();
   setupLinkManagement();
   setupViewTabs();
+  setupCollectionModal();
   initCalendar();
 
   // 隐藏加载动画

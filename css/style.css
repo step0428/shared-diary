@@ -4,6 +4,12 @@
   box-sizing: border-box;
 }
 
+:root {
+  --tag-bg-color: rgba(126, 184, 218, 0.15);
+  --tag-border-color: #7eb8da;
+  --tag-text-color: #7eb8da;
+}
+
 body {
   min-height: 100vh;
   background: linear-gradient(to bottom, #0a0a12 0%, #0d1520 40%, #0a1a2a 100%);
@@ -421,13 +427,29 @@ body {
 }
 
 .fc .fc-event {
-  background: rgba(126, 184, 218, 0.3);
-  border: 1px solid rgba(126, 184, 218, 0.5);
-  color: rgba(255, 255, 255, 0.95);
   font-size: 12px;
   padding: 2px 6px;
   border-radius: 4px;
   cursor: pointer;
+  color: #fff !important;
+}
+
+.fc .fc-event .fc-event-main {
+  color: #fff !important;
+}
+
+.fc .fc-timegrid-slot-label,
+.fc .fc-col-header-cell-cushion {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.fc .fc-timegrid-event .fc-event-title,
+.fc .fc-timegrid-event .fc-event-time {
+  color: #fff !important;
+}
+
+.fc .fc-daygrid-event .fc-event-title {
+  color: #fff !important;
 }
 
 .fc .fc-scrollgrid {
@@ -490,6 +512,11 @@ body {
   color: rgba(255, 255, 255, 0.9);
   font-size: 14px;
   font-family: inherit;
+}
+
+.form-row select option {
+  background: rgba(255, 255, 255, 0.95);
+  color: rgba(0, 0, 0, 0.9);
 }
 
 .form-row input[type="date"]:focus,
@@ -770,3 +797,5 @@ body {
     width: calc(100% - 30px);
   }
 }
+
+/* 日历事件样式 - FullCalendar handles colors via inline styles */

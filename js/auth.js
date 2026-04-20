@@ -42,10 +42,12 @@ async function showMainApp() {
   document.getElementById('authPage').classList.add('hidden');
   document.getElementById('mainApp').classList.remove('hidden');
   document.getElementById('userName').textContent = currentUserData && currentUserData.displayName ? currentUserData.displayName : currentUser.email;
-  // 加载用户标签
+  // 加载用户标签和合集
   await loadUserTags();
   renderTagOptions();
   setupAddTag();
+  setupCollectionModal();
+  updateCollectionFilter();
   setTimeout(function() { window.checkInviteLink(); }, 500);
 }
 

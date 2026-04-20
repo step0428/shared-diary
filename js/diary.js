@@ -27,24 +27,39 @@ var DEFAULT_TAGS = [
 // 用户标签
 var userTags = DEFAULT_TAGS.slice();
 
-// 加载用户标签
+// 用户合集
+var userCollections = [];
+
+// 用户缓存
+var userCache = {};
+
+// 加载用户标签和合集
 async function loadUserTags() {
   try {
     var userDoc = await db.collection('users').doc(currentUser.uid).get();
-    if (userDoc.exists && userDoc.data().tags) {
-      userTags = userDoc.data().tags;
+    if (userDoc.exists) {
+      if (userDoc.data().tags) {
+        userTags = userDoc.data().tags;
+      }
+      if (userDoc.data().collections) {
+        userCollections = userDoc.data().collections;
+      } else {
+        userCollections = [];
+      }
     } else {
       await db.collection('users').doc(currentUser.uid).update({
-        tags: DEFAULT_TAGS
+        tags: DEFAULT_TAGS,
+        collections: []
       });
     }
   } catch (e) {
     userTags = DEFAULT_TAGS.slice();
+    userCollections = [];
   }
 }
 
 // 渲染标签选项
-function renderTagOptions() {
+function renderTagOptions(selectedTagId) {
   var container = document.getElementById('tagOptions');
   if (!container) return;
 
@@ -53,17 +68,33 @@ function renderTagOptions() {
     var tag = userTags[i];
     var btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'tag-select-btn';
+    btn.className = 'tag-select-btn' + (tag.id === selectedTagId ? ' selected' : '');
     btn.dataset.tagId = tag.id;
-    btn.style.cssText = 'padding:6px 14px;background:' + tag.color + '33;border:2px solid ' + tag.color + ';border-radius:15px;color:' + tag.color + ';font-size:13px;cursor:pointer;transition:all 0.2s;';
+    btn.dataset.tagColor = tag.color;
+    var isSelected = tag.id === selectedTagId;
+    btn.style.cssText = 'padding:6px 14px;background:' + (isSelected ? tag.color : tag.color + '33') + ';border:2px solid ' + tag.color + ';border-radius:15px;color:' + (isSelected ? '#fff' : tag.color) + ';font-size:13px;cursor:pointer;transition:all 0.2s;';
     btn.textContent = tag.name;
 
-    btn.addEventListener('click', function() {
-      var allBtns = container.querySelectorAll('.tag-select-btn');
-      allBtns.forEach(function(b) { b.classList.remove('selected'); b.style.background = b.style.borderColor + '33'; });
-      this.classList.add('selected');
-      this.style.background = this.style.borderColor;
-    });
+    btn.addEventListener('click', function(tagId) {
+      var currentSelected = container.querySelector('.tag-select-btn.selected');
+      if (currentSelected && currentSelected.dataset.tagId === tagId) {
+        // 取消选中
+        currentSelected.classList.remove('selected');
+        var origColor = currentSelected.dataset.tagColor;
+        currentSelected.style.background = origColor + '33';
+        currentSelected.style.color = origColor;
+      } else {
+        // 选中
+        container.querySelectorAll('.tag-select-btn').forEach(function(b) {
+          b.classList.remove('selected');
+          b.style.background = b.dataset.tagColor + '33';
+          b.style.color = b.dataset.tagColor;
+        });
+        this.classList.add('selected');
+        this.style.background = this.dataset.tagColor;
+        this.style.color = '#fff';
+      }
+    }.bind(btn, tag.id));
 
     container.appendChild(btn);
   }
@@ -94,32 +125,38 @@ function renderTagManagementList() {
     colorInput.type = 'color';
     colorInput.value = tag.color;
     colorInput.style.cssText = 'width:36px;height:36px;border:none;cursor:pointer;border-radius:6px;';
-    colorInput.addEventListener('change', function(idx, val) {
-      userTags[idx].color = val;
-      saveUserTags();
-      renderTagManagementList();
-      renderTagOptions();
-    }.bind(null, i));
+    colorInput.addEventListener('input', function(idx) {
+      return function(e) {
+        userTags[idx].color = e.target.value;
+        saveUserTags();
+        renderTagManagementList();
+        renderTagOptions();
+      };
+    }(i));
 
     var nameInput = document.createElement('input');
     nameInput.type = 'text';
     nameInput.value = tag.name;
     nameInput.style.cssText = 'flex:1;padding:8px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:rgba(255,255,255,0.9);font-size:14px;font-family:inherit;';
-    nameInput.addEventListener('change', function(idx, val) {
-      userTags[idx].name = val;
-      saveUserTags();
-      renderTagOptions();
-    }.bind(null, i));
+    nameInput.addEventListener('input', function(idx) {
+      return function(e) {
+        userTags[idx].name = e.target.value;
+        saveUserTags();
+        renderTagOptions();
+      };
+    }(i));
 
     var deleteBtn = document.createElement('button');
     deleteBtn.textContent = '删除';
     deleteBtn.style.cssText = 'padding:6px 12px;background:rgba(255,100,100,0.2);border:1px solid rgba(255,100,100,0.4);border-radius:6px;color:rgba(255,255,255,0.8);font-size:12px;cursor:pointer;';
     deleteBtn.addEventListener('click', function(idx) {
-      userTags.splice(idx, 1);
-      saveUserTags();
-      renderTagManagementList();
-      renderTagOptions();
-    }.bind(null, i));
+      return function() {
+        userTags.splice(idx, 1);
+        saveUserTags();
+        renderTagManagementList();
+        renderTagOptions();
+      };
+    }(i));
 
     item.appendChild(colorInput);
     item.appendChild(nameInput);
@@ -128,17 +165,15 @@ function renderTagManagementList() {
   }
 }
 
-// 添加新标签（从管理弹窗）
+// 添加新标签（从管理弹窗，使用颜色选择器）
 function addTagFromModal() {
   var name = prompt('输入标签名称：');
   if (!name || !name.trim()) return;
 
-  var color = prompt('输入标签颜色（英文，如 red, blue, #ff0000）：') || '#7eb8da';
-
   var newTag = {
     id: 'tag_' + Date.now(),
     name: name.trim(),
-    color: color.trim()
+    color: '#7eb8da'
   };
 
   userTags.push(newTag);
@@ -158,11 +193,27 @@ async function saveUserTags() {
   }
 }
 
+// 保存用户合集到 Firestore
+async function saveUserCollections() {
+  try {
+    await db.collection('users').doc(currentUser.uid).update({
+      collections: userCollections
+    });
+  } catch (e) {
+    console.error('保存合集失败:', e);
+  }
+}
+
 // 设置添加标签按钮
 function setupAddTag() {
   var addBtn = document.getElementById('addTagBtn');
   if (addBtn) {
-    addBtn.addEventListener('click', addTagFromModal);
+    addBtn.style.display = 'none';
+  }
+
+  var addBtnModal = document.getElementById('addTagBtnModal');
+  if (addBtnModal) {
+    addBtnModal.addEventListener('click', addTagFromModal);
   }
 
   var manageBtn = document.getElementById('manageTagsBtn');
@@ -176,13 +227,125 @@ function setupAddTag() {
   }
 }
 
+// 合集管理
+function openCollectionModal() {
+  document.getElementById('collectionModal').classList.remove('hidden');
+  renderCollectionList();
+}
+
+function closeCollectionModal() {
+  document.getElementById('collectionModal').classList.add('hidden');
+}
+
+function renderCollectionList() {
+  var list = document.getElementById('collectionList');
+  list.innerHTML = '';
+
+  for (var i = 0; i < userCollections.length; i++) {
+    var col = userCollections[i];
+    var item = document.createElement('div');
+    item.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;';
+
+    var nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.value = col.name;
+    nameInput.style.cssText = 'flex:1;padding:8px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:rgba(255,255,255,0.9);font-size:14px;font-family:inherit;';
+    nameInput.addEventListener('input', function(idx, val) {
+      userCollections[idx].name = val;
+      saveUserCollections();
+    }.bind(null, i));
+
+    var deleteBtn = document.createElement('button');
+    deleteBtn.textContent = '删除';
+    deleteBtn.style.cssText = 'padding:6px 12px;background:rgba(255,100,100,0.2);border:1px solid rgba(255,100,100,0.4);border-radius:6px;color:rgba(255,255,255,0.8);font-size:12px;cursor:pointer;';
+    deleteBtn.addEventListener('click', function(idx) {
+      userCollections.splice(idx, 1);
+      saveUserCollections();
+      renderCollectionList();
+      updateCollectionFilter();
+    }.bind(null, i));
+
+    item.appendChild(nameInput);
+    item.appendChild(deleteBtn);
+    list.appendChild(item);
+  }
+}
+
+function addCollection() {
+  var input = document.getElementById('newCollectionName');
+  var name = input.value.trim();
+  if (!name) return;
+
+  userCollections.push({
+    id: 'col_' + Date.now(),
+    name: name
+  });
+  saveUserCollections();
+  input.value = '';
+  renderCollectionList();
+  updateCollectionFilter();
+}
+
+function updateCollectionFilter() {
+  var select = document.getElementById('collectionFilter');
+  select.innerHTML = '<option value="" style="color:#000;">全部日记</option>';
+  for (var i = 0; i < userCollections.length; i++) {
+    var opt = document.createElement('option');
+    opt.value = userCollections[i].id;
+    opt.textContent = userCollections[i].name;
+    opt.style.color = '#000';
+    select.appendChild(opt);
+  }
+
+  var diaryColSelect = document.getElementById('diaryCollection');
+  diaryColSelect.innerHTML = '<option value="" style="color:#000;">无</option>';
+  for (var j = 0; j < userCollections.length; j++) {
+    var opt2 = document.createElement('option');
+    opt2.value = userCollections[j].id;
+    opt2.textContent = userCollections[j].name;
+    opt2.style.color = '#000';
+    diaryColSelect.appendChild(opt2);
+  }
+}
+
+function setupCollectionModal() {
+  var collectionsBtn = document.getElementById('collectionsBtn');
+  if (collectionsBtn) {
+    collectionsBtn.addEventListener('click', openCollectionModal);
+  }
+
+  var closeBtn = document.getElementById('closeCollectionModal');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', closeCollectionModal);
+  }
+
+  var addBtn = document.getElementById('addCollectionBtn');
+  if (addBtn) {
+    addBtn.addEventListener('click', addCollection);
+  }
+
+  var filterSelect = document.getElementById('collectionFilter');
+  if (filterSelect) {
+    filterSelect.addEventListener('change', function() {
+      loadDiaries();
+    });
+  }
+}
+
 // 加载日记列表
+var currentLoadToken = 0;
+
 async function loadDiaries() {
+  var myLoadToken = ++currentLoadToken;
+
   var diaryList = document.getElementById('diaryList');
+  var collectionFilter = document.getElementById('collectionFilter').value;
 
   try {
     var allDiaries = await db.collection('diaries').get();
     var linkedIds = await getLinkedUserIds();
+
+    if (myLoadToken !== currentLoadToken) return;
 
     var myDiaries = [];
     for (var i = 0; i < allDiaries.docs.length; i++) {
@@ -193,6 +356,9 @@ async function loadDiaries() {
         (data.visibility === 'public' || (data.visibility === 'shared' && data.sharedWith && data.sharedWith.indexOf(currentUser.uid) !== -1));
 
       if (isMine || isLinkedAndShared) {
+        if (collectionFilter && data.collectionId !== collectionFilter) {
+          continue;
+        }
         myDiaries.push({doc: doc, data: data});
       }
     }
@@ -201,6 +367,8 @@ async function loadDiaries() {
       return b.data.date.toDate() - a.data.date.toDate();
     });
 
+    if (myLoadToken !== currentLoadToken) return;
+
     if (myDiaries.length === 0) {
       diaryList.innerHTML = '<div class="empty-state">还没有日记<br>写下第一篇吧</div>';
       return;
@@ -208,20 +376,36 @@ async function loadDiaries() {
 
     diaryList.innerHTML = '';
 
+    // 批量获取所有需要的用户信息
+    var userIds = [];
+    for (var j = 0; j < myDiaries.length; j++) {
+      if (userIds.indexOf(myDiaries[j].data.userId) === -1) {
+        userIds.push(myDiaries[j].data.userId);
+      }
+    }
+    var userDocs = {};
+    if (userIds.length > 0) {
+      var userSnapshot = await db.collection('users').get();
+      userSnapshot.docs.forEach(function(userDoc) {
+        if (userIds.indexOf(userDoc.id) !== -1) {
+          userDocs[userDoc.id] = userDoc.data();
+          userCache[userDoc.id] = userDoc.data();
+        }
+      });
+    }
+
     for (var j = 0; j < myDiaries.length; j++) {
       var itemData = myDiaries[j];
       var doc = itemData.doc;
       var data = itemData.data;
-      var authorDoc = await db.collection('users').doc(data.userId).get();
-      var authorName = authorDoc.exists ? (authorDoc.data().displayName || authorDoc.data().email) : '未知';
+      var userData = userDocs[data.userId];
+      var authorName = userData ? (userData.displayName || userData.email) : '未知';
 
       var date = data.date.toDate();
       var timeStr = data.time || '';
       var dateStr = date.getFullYear() + '.' + String(date.getMonth() + 1).padStart(2, '0') + '.' + String(date.getDate()).padStart(2, '0');
       if (timeStr) {
-        var hours = String(date.getHours()).padStart(2, '0');
-        var mins = String(date.getMinutes()).padStart(2, '0');
-        dateStr += ' ' + hours + ':' + mins;
+        dateStr += ' ' + timeStr;
       }
 
       var visibilityText = {
@@ -246,35 +430,44 @@ async function loadDiaries() {
       item.className = 'diary-item';
       item.innerHTML = '<div class="diary-item-header"><div><span class="diary-date">' + dateStr + '</span>' + (!isMyDiary ? '<span class="diary-author"> - ' + authorName + '</span>' : '') + tagHtml + '</div><span class="diary-visibility">' + visibilityText + '</span></div>' + titleHtml + '<div class="diary-preview">' + escapeHtml(data.content.substring(0, 150)) + (data.content.length > 150 ? '...' : '') + '</div>' + (data.imageUrl ? '<img class="diary-image" src="' + data.imageUrl + '" alt="">' : '');
 
-      (function(diaryId) {
-        item.addEventListener('click', function() { showDiaryDetail(diaryId); });
-      })(doc.id);
+      (function(diaryId, isMine) {
+        item.addEventListener('click', function(e) {
+          if (e.target.tagName === 'BUTTON') return;
+          showDiaryDetail(diaryId, isMine);
+        });
+        item.addEventListener('dblclick', function() {
+          if (isMine) editDiary(diaryId);
+        });
+      })(doc.id, isMyDiary);
 
       diaryList.appendChild(item);
     }
   } catch (e) {
-    diaryList.innerHTML = '<div class="empty-state">加载失败<br>请刷新重试</div>';
+    if (myLoadToken === currentLoadToken) {
+      diaryList.innerHTML = '<div class="empty-state">加载失败<br>请刷新重试</div>';
+    }
   }
 }
 
 // 显示日记详情
-async function showDiaryDetail(diaryId) {
+async function showDiaryDetail(diaryId, isMine) {
   var doc = await db.collection('diaries').doc(diaryId).get();
   var data = doc.data();
 
-  var authorDoc = await db.collection('users').doc(data.userId).get();
-  var authorName = authorDoc.exists ? (authorDoc.data().displayName || authorDoc.data().email) : '未知';
+  var userData = userCache[data.userId];
+  if (!userData) {
+    var authorDoc = await db.collection('users').doc(data.userId).get();
+    userData = authorDoc.exists ? authorDoc.data() : null;
+    if (userData) userCache[data.userId] = userData;
+  }
+  var authorName = userData ? (userData.displayName || userData.email) : '未知';
 
   var date = data.date.toDate();
   var timeStr = data.time || '';
   var dateStr = date.getFullYear() + '.' + String(date.getMonth() + 1).padStart(2, '0') + '.' + String(date.getDate()).padStart(2, '0');
   if (timeStr) {
-    var hours = String(date.getHours()).padStart(2, '0');
-    var mins = String(date.getMinutes()).padStart(2, '0');
-    dateStr += ' ' + hours + ':' + mins;
+    dateStr += ' ' + timeStr;
   }
-
-  var isMyDiary = data.userId === currentUser.uid;
 
   var tagHtml = '';
   if (data.tagId) {
@@ -286,14 +479,17 @@ async function showDiaryDetail(diaryId) {
 
   var titleHtml = data.title ? '<div style="font-size:22px;color:rgba(255,255,255,0.95);margin-bottom:15px;">' + escapeHtml(data.title) + '</div>' : '';
 
-  var deleteBtnHtml = isMyDiary ? '<button class="diary-delete-btn" id="diaryDeleteBtn" style="margin-top:20px;padding:10px 20px;background:rgba(255,100,100,0.2);border:1px solid rgba(255,100,100,0.4);border-radius:8px;color:rgba(255,255,255,0.9);cursor:pointer;">删除日记</button>' : '';
+  var editBtnHtml = isMine ? '<button id="editDiaryBtn" style="margin-top:20px;margin-right:10px;padding:10px 20px;background:rgba(126,184,218,0.2);border:1px solid rgba(126,184,218,0.4);border-radius:8px;color:rgba(255,255,255,0.9);cursor:pointer;">编辑</button>' : '';
+  var deleteBtnHtml = isMine ? '<button id="deleteDiaryBtn" style="margin-top:20px;padding:10px 20px;background:rgba(255,100,100,0.2);border:1px solid rgba(255,100,100,0.4);border-radius:8px;color:rgba(255,255,255,0.9);cursor:pointer;">删除</button>' : '';
 
   var content = document.getElementById('diaryDetailContent');
-  content.innerHTML = '<div class="diary-meta"><span>' + dateStr + '</span><span>' + authorName + '</span></div>' + titleHtml + tagHtml + '<div style="margin-top:20px;line-height:2;font-size:15px;">' + escapeHtml(data.content) + '</div>' + (data.imageUrl ? '<img src="' + data.imageUrl + '" alt="" style="max-width:100%;margin-top:20px;border-radius:8px;">' : '') + deleteBtnHtml;
+  content.innerHTML = '<div class="diary-meta"><span>' + dateStr + '</span><span>' + authorName + '</span></div>' + titleHtml + tagHtml + '<div style="margin-top:20px;line-height:2;font-size:15px;">' + escapeHtml(data.content) + '</div>' + (data.imageUrl ? '<img src="' + data.imageUrl + '" alt="" style="max-width:100%;margin-top:20px;border-radius:8px;">' : '') + '<div style="margin-top:15px;">' + editBtnHtml + deleteBtnHtml + '</div>';
 
-  var deleteBtn = document.getElementById('diaryDeleteBtn');
-  if (deleteBtn) {
-    deleteBtn.addEventListener('click', function() {
+  if (isMine) {
+    document.getElementById('editDiaryBtn').addEventListener('click', function() {
+      editDiary(diaryId);
+    });
+    document.getElementById('deleteDiaryBtn').addEventListener('click', function() {
       if (confirm('确定要删除这篇日记吗？')) {
         deleteDiary(diaryId);
       }
@@ -301,6 +497,31 @@ async function showDiaryDetail(diaryId) {
   }
 
   document.getElementById('diaryModal').classList.remove('hidden');
+}
+
+// 编辑日记
+function editDiary(diaryId) {
+  document.getElementById('diaryModal').classList.add('hidden');
+
+  db.collection('diaries').doc(diaryId).get().then(function(doc) {
+    var data = doc.data();
+
+    document.getElementById('diaryId').value = diaryId;
+    document.getElementById('diaryTitle').value = data.title || '';
+    document.getElementById('diaryContent').value = data.content;
+
+    var date = data.date.toDate();
+    document.getElementById('diaryDate').value = date.toISOString().split('T')[0];
+    document.getElementById('diaryTime').value = data.time || '';
+
+    document.getElementById('diaryVisibility').value = data.visibility;
+    document.getElementById('diaryCollection').value = data.collectionId || '';
+
+    renderTagOptions(data.tagId);
+
+    document.getElementById('writeModalTitle').textContent = '编辑日记';
+    document.getElementById('writeModal').classList.remove('hidden');
+  });
 }
 
 // 删除日记
@@ -345,14 +566,13 @@ async function uploadToCloudinary(file) {
 // 保存日记
 async function saveDiary(content, date, visibility, sharedWith, imageFile) {
   var imageUrl = null;
+  var diaryId = document.getElementById('diaryId').value;
   var title = document.getElementById('diaryTitle').value.trim();
   var timeInput = document.getElementById('diaryTime').value;
+  var collectionId = document.getElementById('diaryCollection').value;
 
-  var selectedTagId = null;
   var selectedTag = document.querySelector('.tag-select-btn.selected');
-  if (selectedTag) {
-    selectedTagId = selectedTag.dataset.tagId;
-  }
+  var tagId = selectedTag ? selectedTag.dataset.tagId : null;
 
   if (imageFile) {
     try {
@@ -362,7 +582,6 @@ async function saveDiary(content, date, visibility, sharedWith, imageFile) {
     }
   }
 
-  // 处理日期和时间
   var dateObj = new Date(date);
   if (timeInput) {
     var timeParts = timeInput.split(':');
@@ -370,21 +589,42 @@ async function saveDiary(content, date, visibility, sharedWith, imageFile) {
     dateObj.setMinutes(parseInt(timeParts[1], 10));
   }
 
-  await db.collection('diaries').add({
-    userId: currentUser.uid,
+  var diaryData = {
     title: title,
     content: content,
     date: dateObj,
     time: timeInput,
     visibility: visibility,
     sharedWith: visibility === 'shared' ? sharedWith : [],
-    tagId: selectedTagId,
-    imageUrl: imageUrl,
-    createdAt: firebase.firestore.FieldValue.serverTimestamp()
-  });
+    tagId: tagId,
+    collectionId: collectionId || null,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+
+  if (imageUrl) {
+    diaryData.imageUrl = imageUrl;
+  }
+
+  if (diaryId) {
+    await db.collection('diaries').doc(diaryId).update(diaryData);
+  } else {
+    diaryData.userId = currentUser.uid;
+    diaryData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+    await db.collection('diaries').add(diaryData);
+  }
 
   loadDiaries();
   closeWriteModal();
+}
+
+// 关闭写日记弹窗并重置
+function closeWriteModal() {
+  document.getElementById('writeModal').classList.add('hidden');
+  document.getElementById('diaryId').value = '';
+  document.getElementById('writeModalTitle').textContent = '写日记';
+  document.getElementById('diaryTitle').value = '';
+  document.getElementById('diaryContent').value = '';
+  document.getElementById('diaryCollection').value = '';
 }
 
 // 加载分享用户列表
