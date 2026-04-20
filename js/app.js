@@ -110,13 +110,17 @@ function setupWriteDiary() {
 }
 
 function openWriteModal() {
+  var now = new Date();
   document.getElementById('writeModal').classList.remove('hidden');
+  document.getElementById('diaryTitle').value = '';
   document.getElementById('diaryContent').value = '';
-  document.getElementById('diaryDate').value = new Date().toISOString().split('T')[0];
+  document.getElementById('diaryDate').value = now.toISOString().split('T')[0];
+  document.getElementById('diaryTime').value = now.toTimeString().slice(0, 5);
   document.getElementById('diaryVisibility').value = 'private';
   document.getElementById('shareSelectRow').classList.add('hidden');
   document.getElementById('diaryImage').value = '';
   loadShareUsers();
+  renderTagOptions();
 }
 
 function closeWriteModal() {
