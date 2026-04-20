@@ -30,7 +30,6 @@ async function loadCalendarEvents() {
   try {
     var linkedIds = await getLinkedUserIds();
 
-    // 获取所有日记
     var allDiaries = await db.collection('diaries').get();
 
     for (var i = 0; i < allDiaries.docs.length; i++) {
@@ -42,15 +41,30 @@ async function loadCalendarEvents() {
         (data.visibility === 'public' || (data.visibility === 'shared' && data.sharedWith && data.sharedWith.indexOf(currentUser.uid) !== -1));
 
       if (isMine || isLinkedAndShared) {
-        var userDoc = await db.collection('users').doc(data.userId).get();
-        var userName = isMine ? '我的日记' : (userDoc.exists ? (userDoc.data().displayName || userDoc.data().email) : '已链接用户');
+        // 标题：如果有标题就用标题，否则显示"我的日记"或用户名
+        var title = data.title || (isMine ? '我的日记' : '已链接日记');
+
+        // 颜色：如果有标签颜色就用标签颜色，否则用默认的
+        var bgColor, borderColor;
+        if (data.tagId) {
+          var tag = userTags.find(function(t) { return t.id === data.tagId; });
+          if (tag) {
+            bgColor = tag.color + '99'; // 加透明
+            borderColor = tag.color;
+          }
+        }
+
+        if (!bgColor) {
+          bgColor = isMine ? 'rgba(126, 184, 218, 0.6)' : 'rgba(255, 200, 150, 0.6)';
+          borderColor = isMine ? 'rgba(126, 184, 218, 0.8)' : 'rgba(255, 200, 150, 0.8)';
+        }
 
         events.push({
           id: doc.id,
-          title: userName,
+          title: title,
           start: data.date.toDate(),
-          backgroundColor: isMine ? 'rgba(126, 184, 218, 0.6)' : 'rgba(255, 200, 150, 0.6)',
-          borderColor: isMine ? 'rgba(126, 184, 218, 0.8)' : 'rgba(255, 200, 150, 0.8)',
+          backgroundColor: bgColor,
+          borderColor: borderColor,
           extendedProps: {
             diaryId: doc.id,
             isMyDiary: isMine
