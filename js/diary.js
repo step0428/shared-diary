@@ -34,7 +34,6 @@ async function loadUserTags() {
     if (userDoc.exists && userDoc.data().tags) {
       userTags = userDoc.data().tags;
     } else {
-      // 保存默认标签
       await db.collection('users').doc(currentUser.uid).update({
         tags: DEFAULT_TAGS
       });
@@ -56,40 +55,96 @@ function renderTagOptions() {
     btn.type = 'button';
     btn.className = 'tag-select-btn';
     btn.dataset.tagId = tag.id;
-    btn.style.cssText = 'padding:6px 14px;background:' + tag.color + '33;border:1px solid ' + tag.color + ';border-radius:15px;color:' + tag.color + ';font-size:13px;cursor:pointer;transition:all 0.3s;';
+    btn.style.cssText = 'padding:6px 14px;background:' + tag.color + '33;border:2px solid ' + tag.color + ';border-radius:15px;color:' + tag.color + ';font-size:13px;cursor:pointer;transition:all 0.2s;';
     btn.textContent = tag.name;
 
     btn.addEventListener('click', function() {
-      this.style.background = this.style.borderColor.includes('opacity') ? this.style.backgroundColor : this.style.borderColor;
-      this.classList.toggle('selected');
-      this.style.background = this.classList.contains('selected') ? this.style.borderColor : this.style.borderColor + '33';
+      var allBtns = container.querySelectorAll('.tag-select-btn');
+      allBtns.forEach(function(b) { b.classList.remove('selected'); b.style.background = b.style.borderColor + '33'; });
+      this.classList.add('selected');
+      this.style.background = this.style.borderColor;
     });
 
     container.appendChild(btn);
   }
 }
 
-// 添加新标签
-function setupAddTag() {
-  var addBtn = document.getElementById('addTagBtn');
-  if (!addBtn) return;
+// 打开标签管理弹窗
+function openTagModal() {
+  document.getElementById('tagModal').classList.remove('hidden');
+  renderTagManagementList();
+}
 
-  addBtn.addEventListener('click', function() {
-    var name = prompt('输入标签名称：');
-    if (!name || !name.trim()) return;
+// 关闭标签管理弹窗
+function closeTagModal() {
+  document.getElementById('tagModal').classList.add('hidden');
+}
 
-    var color = prompt('输入标签颜色（英文，如 red, blue, #ff0000）：') || '#7eb8da';
+// 渲染标签管理列表
+function renderTagManagementList() {
+  var list = document.getElementById('tagManagementList');
+  list.innerHTML = '';
 
-    var newTag = {
-      id: 'tag_' + Date.now(),
-      name: name.trim(),
-      color: color.trim()
-    };
+  for (var i = 0; i < userTags.length; i++) {
+    var tag = userTags[i];
+    var item = document.createElement('div');
+    item.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;';
 
-    userTags.push(newTag);
-    saveUserTags();
-    renderTagOptions();
-  });
+    var colorInput = document.createElement('input');
+    colorInput.type = 'color';
+    colorInput.value = tag.color;
+    colorInput.style.cssText = 'width:36px;height:36px;border:none;cursor:pointer;border-radius:6px;';
+    colorInput.addEventListener('change', function(idx, val) {
+      userTags[idx].color = val;
+      saveUserTags();
+      renderTagManagementList();
+      renderTagOptions();
+    }.bind(null, i));
+
+    var nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.value = tag.name;
+    nameInput.style.cssText = 'flex:1;padding:8px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:rgba(255,255,255,0.9);font-size:14px;font-family:inherit;';
+    nameInput.addEventListener('change', function(idx, val) {
+      userTags[idx].name = val;
+      saveUserTags();
+      renderTagOptions();
+    }.bind(null, i));
+
+    var deleteBtn = document.createElement('button');
+    deleteBtn.textContent = '删除';
+    deleteBtn.style.cssText = 'padding:6px 12px;background:rgba(255,100,100,0.2);border:1px solid rgba(255,100,100,0.4);border-radius:6px;color:rgba(255,255,255,0.8);font-size:12px;cursor:pointer;';
+    deleteBtn.addEventListener('click', function(idx) {
+      userTags.splice(idx, 1);
+      saveUserTags();
+      renderTagManagementList();
+      renderTagOptions();
+    }.bind(null, i));
+
+    item.appendChild(colorInput);
+    item.appendChild(nameInput);
+    item.appendChild(deleteBtn);
+    list.appendChild(item);
+  }
+}
+
+// 添加新标签（从管理弹窗）
+function addTagFromModal() {
+  var name = prompt('输入标签名称：');
+  if (!name || !name.trim()) return;
+
+  var color = prompt('输入标签颜色（英文，如 red, blue, #ff0000）：') || '#7eb8da';
+
+  var newTag = {
+    id: 'tag_' + Date.now(),
+    name: name.trim(),
+    color: color.trim()
+  };
+
+  userTags.push(newTag);
+  saveUserTags();
+  renderTagManagementList();
+  renderTagOptions();
 }
 
 // 保存用户标签到 Firestore
@@ -100,6 +155,24 @@ async function saveUserTags() {
     });
   } catch (e) {
     console.error('保存标签失败:', e);
+  }
+}
+
+// 设置添加标签按钮
+function setupAddTag() {
+  var addBtn = document.getElementById('addTagBtn');
+  if (addBtn) {
+    addBtn.addEventListener('click', addTagFromModal);
+  }
+
+  var manageBtn = document.getElementById('manageTagsBtn');
+  if (manageBtn) {
+    manageBtn.addEventListener('click', openTagModal);
+  }
+
+  var closeTagBtn = document.getElementById('closeTagModal');
+  if (closeTagBtn) {
+    closeTagBtn.addEventListener('click', closeTagModal);
   }
 }
 
@@ -143,7 +216,13 @@ async function loadDiaries() {
       var authorName = authorDoc.exists ? (authorDoc.data().displayName || authorDoc.data().email) : '未知';
 
       var date = data.date.toDate();
+      var timeStr = data.time || '';
       var dateStr = date.getFullYear() + '.' + String(date.getMonth() + 1).padStart(2, '0') + '.' + String(date.getDate()).padStart(2, '0');
+      if (timeStr) {
+        var hours = String(date.getHours()).padStart(2, '0');
+        var mins = String(date.getMinutes()).padStart(2, '0');
+        dateStr += ' ' + hours + ':' + mins;
+      }
 
       var visibilityText = {
         'private': '仅自己可见',
@@ -153,7 +232,6 @@ async function loadDiaries() {
 
       var isMyDiary = data.userId === currentUser.uid;
 
-      // 标签
       var tagHtml = '';
       if (data.tagId) {
         var tag = userTags.find(function(t) { return t.id === data.tagId; });
@@ -162,7 +240,6 @@ async function loadDiaries() {
         }
       }
 
-      // 标题
       var titleHtml = data.title ? '<div style="font-size:16px;color:rgba(255,255,255,0.95);margin-bottom:8px;">' + escapeHtml(data.title) + '</div>' : '';
 
       var item = document.createElement('div');
@@ -189,11 +266,16 @@ async function showDiaryDetail(diaryId) {
   var authorName = authorDoc.exists ? (authorDoc.data().displayName || authorDoc.data().email) : '未知';
 
   var date = data.date.toDate();
+  var timeStr = data.time || '';
   var dateStr = date.getFullYear() + '.' + String(date.getMonth() + 1).padStart(2, '0') + '.' + String(date.getDate()).padStart(2, '0');
+  if (timeStr) {
+    var hours = String(date.getHours()).padStart(2, '0');
+    var mins = String(date.getMinutes()).padStart(2, '0');
+    dateStr += ' ' + hours + ':' + mins;
+  }
 
   var isMyDiary = data.userId === currentUser.uid;
 
-  // 标签
   var tagHtml = '';
   if (data.tagId) {
     var tag = userTags.find(function(t) { return t.id === data.tagId; });
@@ -202,7 +284,6 @@ async function showDiaryDetail(diaryId) {
     }
   }
 
-  // 标题
   var titleHtml = data.title ? '<div style="font-size:22px;color:rgba(255,255,255,0.95);margin-bottom:15px;">' + escapeHtml(data.title) + '</div>' : '';
 
   var deleteBtnHtml = isMyDiary ? '<button class="diary-delete-btn" id="diaryDeleteBtn" style="margin-top:20px;padding:10px 20px;background:rgba(255,100,100,0.2);border:1px solid rgba(255,100,100,0.4);border-radius:8px;color:rgba(255,255,255,0.9);cursor:pointer;">删除日记</button>' : '';
@@ -265,9 +346,9 @@ async function uploadToCloudinary(file) {
 async function saveDiary(content, date, visibility, sharedWith, imageFile) {
   var imageUrl = null;
   var title = document.getElementById('diaryTitle').value.trim();
-  var selectedTagId = null;
+  var timeInput = document.getElementById('diaryTime').value;
 
-  // 获取选中的标签
+  var selectedTagId = null;
   var selectedTag = document.querySelector('.tag-select-btn.selected');
   if (selectedTag) {
     selectedTagId = selectedTag.dataset.tagId;
@@ -281,11 +362,20 @@ async function saveDiary(content, date, visibility, sharedWith, imageFile) {
     }
   }
 
+  // 处理日期和时间
+  var dateObj = new Date(date);
+  if (timeInput) {
+    var timeParts = timeInput.split(':');
+    dateObj.setHours(parseInt(timeParts[0], 10));
+    dateObj.setMinutes(parseInt(timeParts[1], 10));
+  }
+
   await db.collection('diaries').add({
     userId: currentUser.uid,
     title: title,
     content: content,
-    date: new Date(date),
+    date: dateObj,
+    time: timeInput,
     visibility: visibility,
     sharedWith: visibility === 'shared' ? sharedWith : [],
     tagId: selectedTagId,
