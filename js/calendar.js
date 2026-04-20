@@ -41,15 +41,22 @@ async function loadCalendarEvents() {
         (data.visibility === 'public' || (data.visibility === 'shared' && data.sharedWith && data.sharedWith.indexOf(currentUser.uid) !== -1));
 
       if (isMine || isLinkedAndShared) {
-        // 标题：如果有标题就用标题，否则显示"我的日记"或用户名
+        // 标题：只用日记标题，不显示时间
         var title = data.title || (isMine ? '我的日记' : '已链接日记');
 
-        // 颜色：如果有标签颜色就用标签颜色，否则用默认的
+        // 获取时间（如果没有就用12:00）
+        var eventDate = data.date.toDate();
+        var timeStr = data.time || '12:00';
+        var timeParts = timeStr.split(':');
+        eventDate.setHours(parseInt(timeParts[0], 10));
+        eventDate.setMinutes(parseInt(timeParts[1], 10));
+
+        // 颜色
         var bgColor, borderColor;
         if (data.tagId) {
           var tag = userTags.find(function(t) { return t.id === data.tagId; });
           if (tag) {
-            bgColor = tag.color + '99'; // 加透明
+            bgColor = tag.color + '99';
             borderColor = tag.color;
           }
         }
@@ -62,7 +69,7 @@ async function loadCalendarEvents() {
         events.push({
           id: doc.id,
           title: title,
-          start: data.date.toDate(),
+          start: eventDate,
           backgroundColor: bgColor,
           borderColor: borderColor,
           extendedProps: {
@@ -90,7 +97,10 @@ function handleCalendarEventClick(info) {
 
 // 处理日期点击
 function handleCalendarDateClick(info) {
+  var now = new Date();
+  var timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
   document.getElementById('diaryDate').value = info.dateStr;
+  document.getElementById('diaryTime').value = timeStr;
   openWriteModal();
 }
 
