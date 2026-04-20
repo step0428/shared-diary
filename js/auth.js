@@ -38,10 +38,14 @@ function showAuthPage() {
 }
 
 // 显示主应用
-function showMainApp() {
+async function showMainApp() {
   document.getElementById('authPage').classList.add('hidden');
   document.getElementById('mainApp').classList.remove('hidden');
   document.getElementById('userName').textContent = currentUserData && currentUserData.displayName ? currentUserData.displayName : currentUser.email;
+  // 加载用户标签
+  await loadUserTags();
+  renderTagOptions();
+  setupAddTag();
   setTimeout(function() { window.checkInviteLink(); }, 500);
 }
 
