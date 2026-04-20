@@ -102,14 +102,48 @@ async function showDiaryDetail(diaryId) {
   document.getElementById('diaryModal').classList.remove('hidden');
 }
 
+// Cloudinary 配置
+var CLOUDINARY_CLOUD_NAME = 'dx21h5ymk';
+var CLOUDINARY_API_KEY = '529277918461595';
+var CLOUDINARY_API_SECRET = 'BR-RJPnOP2ECageGJbQAhawCBDY';
+
+// 上传图片到 Cloudinary
+async function uploadToCloudinary(file) {
+  return new Promise(function(resolve, reject) {
+    var formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', 'ml_default');
+
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', 'https://api.cloudinary.com/v1_1/' + CLOUDINARY_CLOUD_NAME + '/image/upload');
+
+    xhr.onload = function() {
+      if (xhr.status === 200) {
+        var response = JSON.parse(xhr.responseText);
+        resolve(response.secure_url);
+      } else {
+        reject(new Error('Upload failed'));
+      }
+    };
+
+    xhr.onerror = function() {
+      reject(new Error('Network error'));
+    };
+
+    xhr.send(formData);
+  });
+}
+
 // 保存日记
 async function saveDiary(content, date, visibility, sharedWith, imageFile) {
   var imageUrl = null;
 
   if (imageFile) {
-    var ref = storage.ref().child('diary-images/' + currentUser.uid + '/' + Date.now() + '-' + imageFile.name);
-    await ref.put(imageFile);
-    imageUrl = await ref.getDownloadURL();
+    try {
+      imageUrl = await uploadToCloudinary(imageFile);
+    } catch (e) {
+      console.error('图片上传失败:', e);
+    }
   }
 
   await db.collection('diaries').add({
