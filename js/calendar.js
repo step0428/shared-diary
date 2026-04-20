@@ -73,8 +73,8 @@ async function loadCalendarEvents() {
         (data.visibility === 'public' || (data.visibility === 'shared' && data.sharedWith && data.sharedWith.indexOf(currentUser.uid) !== -1));
 
       if (isMine || isLinkedAndShared) {
-        // 标题只显示日记标题
-        var title = data.title || (isMine ? '我的日记' : '已链接日记');
+        // 标题只显示记录标题
+        var title = data.title || (isMine ? '我的记录' : '已链接记录');
 
         // 设置时间
         var eventDate = data.date.toDate();

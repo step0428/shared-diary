@@ -11,6 +11,9 @@ function initApp() {
   setupViewTabs();
   setupCollectionModal();
   setupTheme();
+  setupMultiSelectDelete();
+  setupSidebarFilter();
+  setupToggleSidebar();
   initCalendar();
   initParticles();
 
@@ -20,13 +23,84 @@ function initApp() {
   }, 800);
 }
 
+// 设置多选删除
+function setupMultiSelectDelete() {
+  var batchSelectBtn = document.getElementById('batchSelectBtn');
+  var batchActions = document.getElementById('batchActions');
+  var selectAllCheckbox = document.getElementById('selectAllDiary');
+  var deleteBtn = document.getElementById('deleteSelectedBtn');
+
+  batchSelectBtn.addEventListener('click', function() {
+    batchActions.classList.toggle('hidden');
+    var isShown = !batchActions.classList.contains('hidden');
+    if (isShown) {
+      batchSelectBtn.style.background = 'var(--accent-light)';
+      batchSelectBtn.style.color = 'var(--accent)';
+    } else {
+      batchSelectBtn.style.background = '';
+      batchSelectBtn.style.color = '';
+      document.querySelectorAll('.diary-checkbox').forEach(function(cb) {
+        cb.checked = false;
+      });
+      selectAllCheckbox.checked = false;
+    }
+    document.querySelectorAll('.diary-checkbox').forEach(function(cb) {
+      cb.style.display = isShown ? '' : 'none';
+    });
+  });
+
+  selectAllCheckbox.addEventListener('change', function() {
+    var checkboxes = document.querySelectorAll('.diary-checkbox');
+    checkboxes.forEach(function(cb) {
+      cb.checked = selectAllCheckbox.checked;
+    });
+  });
+
+  deleteBtn.addEventListener('click', async function() {
+    var checked = document.querySelectorAll('.diary-checkbox:checked');
+    if (checked.length === 0) {
+      alert('请先选择要删除的记录');
+      return;
+    }
+    if (!confirm('确定要删除选中的 ' + checked.length + ' 篇记录吗？')) {
+      return;
+    }
+
+    deleteBtn.textContent = '删除中...';
+    deleteBtn.disabled = true;
+
+    var ids = [];
+    checked.forEach(function(cb) {
+      var item = cb.closest('.diary-item');
+      if (item && item.dataset.id) {
+        ids.push(item.dataset.id);
+      }
+    });
+
+    for (var i = 0; i < ids.length; i++) {
+      await db.collection('diaries').doc(ids[i]).delete();
+    }
+
+    deleteBtn.textContent = '删除选中';
+    deleteBtn.disabled = false;
+    selectAllCheckbox.checked = false;
+    loadDiaries();
+  });
+}
+
 // 设置认证
 function setupAuth() {
   var authForm = document.getElementById('authForm');
   var authTabs = document.querySelectorAll('.auth-tab');
   var displayNameInput = document.getElementById('displayName');
+  var confirmPasswordInput = document.getElementById('confirmPassword');
+  var authBtn = document.getElementById('authBtn');
   var authError = document.getElementById('authError');
+  var forgotPasswordLink = document.getElementById('forgotPasswordLink');
   var isLogin = true;
+
+  // 初始化显示忘记密码链接
+  forgotPasswordLink.style.display = 'block';
 
   authTabs.forEach(function(tab) {
     tab.addEventListener('click', function() {
@@ -34,14 +108,37 @@ function setupAuth() {
       tab.classList.add('active');
       isLogin = tab.dataset.tab === 'login';
       displayNameInput.classList.toggle('hidden', isLogin);
-      authForm.querySelector('button').textContent = isLogin ? '登录' : '注册';
+      confirmPasswordInput.classList.toggle('hidden', isLogin);
+      forgotPasswordLink.style.display = isLogin ? 'block' : 'none';
+      authBtn.textContent = isLogin ? '登录' : '注册';
       authError.textContent = '';
     });
+  });
+
+  forgotPasswordLink.addEventListener('click', async function() {
+    var email = document.getElementById('email').value.trim();
+    if (!email) {
+      authError.textContent = '请输入邮箱';
+      return;
+    }
+    forgotPasswordLink.textContent = '发送中...';
+    try {
+      await auth.sendPasswordResetEmail(email);
+      authError.textContent = '重置链接已发送到邮箱';
+      authError.style.color = '#6bff6b';
+    } catch (error) {
+      authError.textContent = error.message;
+      authError.style.color = '';
+    }
+    forgotPasswordLink.textContent = '忘记密码？';
   });
 
   authForm.addEventListener('submit', async function(e) {
     e.preventDefault();
     authError.textContent = '';
+    authError.style.color = '';
+    authBtn.textContent = '请稍候...';
+    authBtn.disabled = true;
 
     var email = document.getElementById('email').value;
     var password = document.getElementById('password').value;
@@ -53,17 +150,128 @@ function setupAuth() {
       } else {
         if (!displayName.trim()) {
           authError.textContent = '请输入昵称';
+          authBtn.textContent = '注册';
+          authBtn.disabled = false;
+          return;
+        }
+        if (password !== confirmPasswordInput.value) {
+          authError.textContent = '两次密码输入不一致';
+          authBtn.textContent = '注册';
+          authBtn.disabled = false;
+          return;
+        }
+        if (password.length < 6) {
+          authError.textContent = '密码至少6位';
+          authBtn.textContent = '注册';
+          authBtn.disabled = false;
           return;
         }
         await register(email, password, displayName);
       }
     } catch (error) {
       authError.textContent = error.message;
+      authBtn.textContent = isLogin ? '登录' : '注册';
+      authBtn.disabled = false;
     }
   });
 
   document.getElementById('logoutBtn').addEventListener('click', async function() {
     await logout();
+  });
+}
+
+// 渲染左侧朋友栏
+function renderFriendSidebar() {
+  var friendList = document.getElementById('friendList');
+  friendList.innerHTML = '';
+
+  var items = document.querySelectorAll('.friend-item[data-filter]');
+  items.forEach(function(item) {
+    item.classList.remove('active');
+    if (item.dataset.filter === currentDiaryFilter) {
+      item.classList.add('active');
+    }
+  });
+
+  // 异步加载朋友列表
+  getAcceptedLinks().then(function(acceptedLinks) {
+    friendList.innerHTML = '';
+    if (acceptedLinks.length === 0) {
+      friendList.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:10px;">暂无链接的朋友</div>';
+      return;
+    }
+
+    var fragment = document.createDocumentFragment();
+
+    for (var i = 0; i < acceptedLinks.length; i++) {
+      var linkDoc = acceptedLinks[i];
+      var linkData = linkDoc.data();
+      var isCreator = linkData.userId === currentUser.uid;
+      (function(doc, data, creator) {
+        getLinkUserInfo(data, creator).then(function(otherUser) {
+          var item = document.createElement('div');
+          item.className = 'friend-item';
+          item.dataset.filter = otherUser.userId;
+          item.textContent = otherUser.displayName;
+
+          if (currentDiaryFilter === otherUser.userId) {
+            item.classList.add('active');
+          }
+
+          item.addEventListener('click', function() {
+            currentDiaryFilter = otherUser.userId;
+            document.querySelectorAll('.friend-item').forEach(function(el) {
+              el.classList.remove('active');
+            });
+            item.classList.add('active');
+            loadDiaries();
+          });
+
+          fragment.appendChild(item);
+        });
+      })(linkDoc, linkData, isCreator);
+    }
+
+    friendList.appendChild(fragment);
+  });
+}
+
+// 设置侧边栏筛选
+function setupSidebarFilter() {
+  var allDiaryItem = document.querySelector('.friend-item[data-filter="all"]');
+  var myDiaryItem = document.querySelector('.friend-item[data-filter="mine"]');
+
+  allDiaryItem.addEventListener('click', function() {
+    currentDiaryFilter = 'all';
+    document.querySelectorAll('.friend-item').forEach(function(el) {
+      el.classList.remove('active');
+    });
+    allDiaryItem.classList.add('active');
+    loadDiaries();
+  });
+
+  myDiaryItem.addEventListener('click', function() {
+    currentDiaryFilter = 'mine';
+    document.querySelectorAll('.friend-item').forEach(function(el) {
+      el.classList.remove('active');
+    });
+    myDiaryItem.classList.add('active');
+    loadDiaries();
+  });
+}
+
+// 设置侧边栏展开/收起
+function setupToggleSidebar() {
+  var toggleBtn = document.getElementById('toggleSidebarBtn');
+  var closeBtn = document.getElementById('closeSidebarBtn');
+  var mainApp = document.getElementById('mainApp');
+
+  toggleBtn.addEventListener('click', function() {
+    mainApp.classList.toggle('sidebar-collapsed');
+  });
+
+  closeBtn.addEventListener('click', function() {
+    mainApp.classList.add('sidebar-collapsed');
   });
 }
 
@@ -88,7 +296,9 @@ function setupModal() {
   });
 }
 
-// 设置写日记
+// 设置写记录
+var selectedImageFiles = [];
+
 function setupWriteDiary() {
   document.getElementById('writeBtn').addEventListener('click', openWriteModal);
 
@@ -97,13 +307,37 @@ function setupWriteDiary() {
     shareSelectRow.classList.toggle('hidden', e.target.value !== 'shared');
   });
 
+  document.getElementById('diaryImage').addEventListener('change', function(e) {
+    var files = Array.from(e.target.files);
+    var remaining = 9 - selectedImageFiles.length;
+    if (remaining <= 0) {
+      alert('最多只能选9张图片');
+      e.target.value = '';
+      return;
+    }
+    if (files.length > remaining) {
+      files = files.slice(0, remaining);
+      alert('最多只能选9张图片');
+    }
+    for (var i = 0; i < files.length; i++) {
+      selectedImageFiles.push(files[i]);
+    }
+    e.target.value = '';
+    renderImagePreview();
+  });
+
   document.getElementById('writeForm').addEventListener('submit', async function(e) {
     e.preventDefault();
+
+    var submitBtn = document.getElementById('submitDiaryBtn');
+    var originalText = submitBtn.textContent;
+    submitBtn.textContent = '保存中...';
+    submitBtn.disabled = true;
 
     var content = document.getElementById('diaryContent').value;
     var date = document.getElementById('diaryDate').value;
     var visibility = document.getElementById('diaryVisibility').value;
-    var imageFile = document.getElementById('diaryImage').files[0];
+    var imageFiles = selectedImageFiles;
 
     var sharedWith = [];
     if (visibility === 'shared') {
@@ -112,12 +346,47 @@ function setupWriteDiary() {
       });
     }
 
-    await saveDiary(content, date, visibility, sharedWith, imageFile);
+    try {
+      await saveDiary(content, date, visibility, sharedWith, imageFiles);
+    } finally {
+      submitBtn.textContent = originalText;
+      submitBtn.disabled = false;
+    }
   });
+}
+
+function renderImagePreview() {
+  var preview = document.getElementById('imagePreview');
+  preview.innerHTML = '';
+  for (var i = 0; i < selectedImageFiles.length; i++) {
+    (function(index, file) {
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        var container = document.createElement('div');
+        container.style = 'position:relative;display:inline-block;';
+        var img = document.createElement('img');
+        img.src = e.target.result;
+        img.style = 'width:80px;height:80px;object-fit:cover;border-radius:8px;';
+        var removeBtn = document.createElement('button');
+        removeBtn.textContent = '×';
+        removeBtn.style = 'position:absolute;top:-8px;right:-8px;width:22px;height:22px;border-radius:50%;background:#ff6b6b;border:none;color:#fff;cursor:pointer;font-size:14px;line-height:1;';
+        removeBtn.dataset.index = index;
+        removeBtn.addEventListener('click', function() {
+          selectedImageFiles.splice(index, 1);
+          renderImagePreview();
+        });
+        container.appendChild(img);
+        container.appendChild(removeBtn);
+        preview.appendChild(container);
+      };
+      reader.readAsDataURL(file);
+    })(i, selectedImageFiles[i]);
+  }
 }
 
 function openWriteModal() {
   var now = new Date();
+  selectedImageFiles = [];
   document.getElementById('writeModal').classList.remove('hidden');
   document.getElementById('diaryId').value = '';
   document.getElementById('diaryTitle').value = '';
@@ -127,12 +396,14 @@ function openWriteModal() {
   document.getElementById('diaryVisibility').value = 'private';
   document.getElementById('shareSelectRow').classList.add('hidden');
   document.getElementById('diaryImage').value = '';
+  document.getElementById('imagePreview').innerHTML = '';
   loadShareUsers();
   renderTagOptions();
 }
 
 function closeWriteModal() {
   document.getElementById('writeModal').classList.add('hidden');
+  selectedImageFiles = [];
 }
 
 document.getElementById('closeWriteModal').addEventListener('click', closeWriteModal);
@@ -435,3 +706,14 @@ function initParticles() {
   });
   observer.observe(document.body, { attributes: true, attributeFilter: ['data-theme'] });
 }
+
+// 图片查看器
+window.openImageViewer = function(url) {
+  var viewer = document.createElement('div');
+  viewer.style = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.9);z-index:9999;display:flex;align-items:center;justify-content:center;cursor:pointer;';
+  viewer.innerHTML = '<img src="' + url + '" style="max-width:90%;max-height:90%;object-fit:contain;">';
+  viewer.addEventListener('click', function() {
+    viewer.remove();
+  });
+  document.body.appendChild(viewer);
+};
