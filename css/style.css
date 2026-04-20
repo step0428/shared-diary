@@ -488,20 +488,24 @@ body {
 
 .diary-header {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 25px;
 }
 
 .write-btn {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 24px;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
   background: var(--accent-light);
   border: 1px solid var(--accent);
-  border-radius: 25px;
+  border-radius: 50%;
   color: var(--accent);
-  font-size: 14px;
+  font-size: 24px;
+  font-weight: 300;
   font-family: inherit;
   cursor: pointer;
   transition: all 0.3s;
@@ -1152,27 +1156,8 @@ body {
     width: calc(100% - 30px);
   }
 
-  .write-btn span {
-    display: none;
-  }
-
-  .write-btn svg {
-    display: none;
-  }
-
-  .write-btn::before {
-    content: '+';
-    font-size: 20px;
-  }
-
   .diary-header {
-    flex-wrap: wrap;
     gap: 10px;
-  }
-
-  .diary-header select {
-    width: 100%;
-    order: 2;
   }
 }
 
