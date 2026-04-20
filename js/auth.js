@@ -10,7 +10,6 @@ auth.onAuthStateChanged(async function(user) {
     showMainApp();
     loadDiaries();
     loadLinkedUsers();
-    loadPendingLinks();
   } else {
     currentUser = null;
     currentUserData = null;
@@ -23,11 +22,22 @@ async function loadUserData() {
   var doc = await db.collection('users').doc(currentUser.uid).get();
   if (doc.exists) {
     currentUserData = doc.data();
+    // 如果没有专属码，生成一个
+    if (!currentUserData.linkCode) {
+      var linkCode = generateLinkCode();
+      await db.collection('users').doc(currentUser.uid).update({
+        linkCode: linkCode
+      });
+      currentUserData.linkCode = linkCode;
+    }
   } else {
+    var linkCode = generateLinkCode();
     currentUserData = {
       email: currentUser.email,
-      displayName: currentUser.displayName || ''
+      displayName: currentUser.displayName || '',
+      linkCode: linkCode
     };
+    await db.collection('users').doc(currentUser.uid).set(currentUserData);
   }
 }
 
@@ -55,8 +65,15 @@ var isDragging = false;
 var dragStart = { x: 0, y: 0 };
 
   // 头像点击上传
-  document.getElementById('userInfo').addEventListener('click', function() {
+  document.getElementById('userAvatar').addEventListener('click', function(e) {
+    e.stopPropagation();
     document.getElementById('avatarInput').click();
+  });
+
+  // 名称点击显示菜单
+  document.getElementById('userName').addEventListener('click', function(e) {
+    e.stopPropagation();
+    showUserMenu();
   });
 
   document.getElementById('avatarInput').addEventListener('change', async function(e) {
@@ -233,6 +250,126 @@ var dragStart = { x: 0, y: 0 };
     cropImage = null;
   });
 
+  // 显示用户菜单
+  function showUserMenu() {
+    var existingMenu = document.getElementById('userMenuDropdown');
+    if (existingMenu) {
+      existingMenu.remove();
+      return;
+    }
+
+    var menu = document.createElement('div');
+    menu.id = 'userMenuDropdown';
+    menu.style.cssText = 'position:absolute;top:50px;right:60px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:8px 0;min-width:160px;z-index:1000;box-shadow:0 4px 12px rgba(0,0,0,0.15);';
+    menu.innerHTML = '<div class="menu-item" onclick="openLinkModal()" style="padding:10px 16px;cursor:pointer;font-size:14px;color:var(--text);display:flex;align-items:center;gap:8px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>链接管理</div>' +
+      '<div class="menu-item" onclick="editUserName()" style="padding:10px 16px;cursor:pointer;font-size:14px;color:var(--text);display:flex;align-items:center;gap:8px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>修改名称</div>' +
+      '<div class="menu-item" onclick="showChangePasswordModal()" style="padding:10px 16px;cursor:pointer;font-size:14px;color:var(--text);display:flex;align-items:center;gap:8px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>修改密码</div>' +
+      '<div class="menu-item" onclick="logout()" style="padding:10px 16px;cursor:pointer;font-size:14px;color:#ff6b6b;display:flex;align-items:center;gap:8px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>退出登录</div>';
+
+    document.body.appendChild(menu);
+
+    // 添加hover样式
+    var style = document.createElement('style');
+    style.id = 'userMenuStyle';
+    style.textContent = '.menu-item:hover{background:var(--hover-bg);}';
+    document.head.appendChild(style);
+
+    // 点击其他地方关闭菜单
+    setTimeout(function() {
+      document.addEventListener('click', closeUserMenu);
+    }, 0);
+  }
+
+  // 打开链接管理弹窗
+  window.openLinkModal = function() {
+    var menu = document.getElementById('userMenuDropdown');
+    if (menu) menu.remove();
+    document.getElementById('linkModal').classList.remove('hidden');
+    if (currentUserData && currentUserData.linkCode) {
+      document.getElementById('myLinkCode').textContent = currentUserData.linkCode;
+    }
+    loadLinkedUsers();
+    document.getElementById('connectResult').classList.add('hidden');
+  };
+
+  function closeUserMenu(e) {
+    var menu = document.getElementById('userMenuDropdown');
+    if (menu && !menu.contains(e.target) && e.target.id !== 'userName') {
+      menu.remove();
+      document.removeEventListener('click', closeUserMenu);
+    }
+  }
+
+  // 修改用户名
+  window.editUserName = function() {
+    var menu = document.getElementById('userMenuDropdown');
+    if (menu) menu.remove();
+
+    var newName = prompt('请输入新名称:', currentUserData && currentUserData.displayName ? currentUserData.displayName : '');
+    if (newName && newName.trim()) {
+      db.collection('users').doc(currentUser.uid).update({
+        displayName: newName.trim()
+      }).then(function() {
+        currentUserData.displayName = newName.trim();
+        document.getElementById('userName').textContent = newName.trim();
+        alert('名称修改成功');
+      }).catch(function(err) {
+        console.error('修改名称失败:', err);
+        alert('修改名称失败');
+      });
+    }
+  };
+
+  // 显示修改密码弹窗
+  window.showChangePasswordModal = function() {
+    var menu = document.getElementById('userMenuDropdown');
+    if (menu) menu.remove();
+
+    var modal = document.createElement('div');
+    modal.id = 'passwordModal';
+    modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:2000;';
+    modal.innerHTML = '<div style="background:var(--bg-primary);border-radius:12px;padding:24px;width:320px;max-width:90%;"><h3 style="margin:0 0 16px;font-size:16px;color:var(--text);">修改密码</h3>' +
+      '<div style="margin-bottom:12px;"><label style="display:block;font-size:13px;color:var(--text-muted);margin-bottom:6px;">新密码</label><input type="password" id="newPasswordInput" placeholder="至少6位" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-secondary);color:var(--text);box-sizing:border-box;"></div>' +
+      '<div style="margin-bottom:16px;"><label style="display:block;font-size:13px;color:var(--text-muted);margin-bottom:6px;">确认密码</label><input type="password" id="confirmPasswordInput" placeholder="再次输入新密码" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-secondary);color:var(--text);box-sizing:border-box;"></div>' +
+      '<div style="display:flex;gap:10px;justify-content:flex-end;"><button onclick="closePasswordModal()" style="padding:8px 16px;border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--text);cursor:pointer;">取消</button><button onclick="confirmChangePassword()" style="padding:8px 16px;border:none;border-radius:6px;background:var(--accent);color:#fff;cursor:pointer;">确认</button></div></div>';
+    document.body.appendChild(modal);
+
+    modal.addEventListener('click', function(e) {
+      if (e.target === modal) closePasswordModal();
+    });
+  };
+
+  window.closePasswordModal = function() {
+    var modal = document.getElementById('passwordModal');
+    if (modal) modal.remove();
+  };
+
+  window.confirmChangePassword = function() {
+    var newPass = document.getElementById('newPasswordInput').value;
+    var confirmPass = document.getElementById('confirmPasswordInput').value;
+
+    if (!newPass || newPass.length < 6) {
+      alert('密码至少需要6位');
+      return;
+    }
+    if (newPass !== confirmPass) {
+      alert('两次输入的密码不一致');
+      return;
+    }
+
+    auth.currentUser.updatePassword(newPass).then(function() {
+      alert('密码修改成功');
+      closePasswordModal();
+    }).catch(function(err) {
+      console.error('修改密码失败:', err);
+      if (err.code === 'auth/requires-recent-login') {
+        alert('修改密码需要您最近一次登录后操作，请重新登录后再试');
+      } else {
+        alert('修改密码失败: ' + err.message);
+      }
+    });
+  };
+
   // 加载用户标签和合集
   await loadUserTags();
   renderTagOptions();
@@ -241,16 +378,28 @@ var dragStart = { x: 0, y: 0 };
   updateCollectionFilter();
   await loadUserTheme();
   renderFriendSidebar();
-  setTimeout(function() { window.checkInviteLink(); }, 500);
+}
+
+// 生成专属码
+function generateLinkCode() {
+  var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  var code = '';
+  for (var i = 0; i < 6; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
 }
 
 // 注册
 async function register(email, password, displayName) {
   var result = await auth.createUserWithEmailAndPassword(email, password);
 
+  var linkCode = generateLinkCode();
+
   await db.collection('users').doc(result.user.uid).set({
     email: email,
     displayName: displayName,
+    linkCode: linkCode,
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
   });
 

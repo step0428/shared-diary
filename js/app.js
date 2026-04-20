@@ -174,10 +174,6 @@ function setupAuth() {
       authBtn.disabled = false;
     }
   });
-
-  document.getElementById('logoutBtn').addEventListener('click', async function() {
-    await logout();
-  });
 }
 
 // 渲染左侧朋友栏
@@ -307,6 +303,19 @@ function setupWriteDiary() {
     shareSelectRow.classList.toggle('hidden', e.target.value !== 'shared');
   });
 
+  document.getElementById('coAuthorCheck').addEventListener('change', function(e) {
+    var coAuthorsHint = document.getElementById('coAuthorsHint');
+    var coAuthorsList = document.getElementById('coAuthorsList');
+    if (e.target.checked) {
+      coAuthorsHint.style.display = 'block';
+      coAuthorsList.style.display = 'flex';
+      loadCoAuthors();
+    } else {
+      coAuthorsHint.style.display = 'none';
+      coAuthorsList.style.display = 'none';
+    }
+  });
+
   document.getElementById('diaryImage').addEventListener('change', function(e) {
     var files = Array.from(e.target.files);
     var remaining = 9 - selectedImageFiles.length;
@@ -346,8 +355,18 @@ function setupWriteDiary() {
       });
     }
 
+    var coAuthors = [];
+    if (document.getElementById('coAuthorCheck').checked) {
+      document.querySelectorAll('#coAuthorsList input:checked').forEach(function(checkbox) {
+        if (coAuthors.indexOf(checkbox.value) === -1) {
+          coAuthors.push(checkbox.value);
+        }
+      });
+      coAuthors.push(currentUser.uid); // 创建者也是共建者
+    }
+
     try {
-      await saveDiary(content, date, visibility, sharedWith, imageFiles);
+      await saveDiary(content, date, visibility, sharedWith, imageFiles, coAuthors);
     } finally {
       submitBtn.textContent = originalText;
       submitBtn.disabled = false;
@@ -397,6 +416,9 @@ function openWriteModal() {
   document.getElementById('shareSelectRow').classList.add('hidden');
   document.getElementById('diaryImage').value = '';
   document.getElementById('imagePreview').innerHTML = '';
+  document.getElementById('coAuthorCheck').checked = false;
+  document.getElementById('coAuthorsHint').style.display = 'none';
+  document.getElementById('coAuthorsList').style.display = 'none';
   loadShareUsers();
   renderTagOptions();
 }
@@ -408,117 +430,88 @@ function closeWriteModal() {
 
 document.getElementById('closeWriteModal').addEventListener('click', closeWriteModal);
 
-// 检查 URL 链接参数
-window.checkInviteLink = function() {
-  var urlParams = new URLSearchParams(window.location.search);
-  var linkId = urlParams.get('link');
-  if (linkId && currentUser) {
-    handleIncomingLink(linkId);
-  }
-};
-
 // 设置链接管理
 function setupLinkManagement() {
-  document.getElementById('linkBtn').addEventListener('click', async function() {
-    document.getElementById('linkModal').classList.remove('hidden');
-    loadPendingLinks();
-    loadLinkedUsers();
-    document.getElementById('linkResult').classList.add('hidden');
-  });
-
-  document.getElementById('createLinkBtn').addEventListener('click', async function() {
-    var linkId = await createLink();
-    var linkUrl = window.location.origin + window.location.pathname + '?link=' + linkId;
-    document.getElementById('generatedLink').value = linkUrl;
-    document.getElementById('linkResult').classList.remove('hidden');
-  });
-
-  document.getElementById('copyLinkBtn').addEventListener('click', function() {
-    var input = document.getElementById('generatedLink');
-    input.select();
-    document.execCommand('copy');
-    document.getElementById('copyLinkBtn').textContent = '已复制';
-    setTimeout(function() {
-      document.getElementById('copyLinkBtn').textContent = '复制';
-    }, 2000);
-  });
-}
-
-// 处理收到的链接
-async function handleIncomingLink(linkId) {
-  try {
-    var linkDoc = await db.collection('links').doc(linkId).get();
-
-    if (!linkDoc.exists) {
-      return;
-    }
-
-    var linkData = linkDoc.data();
-
-    if (linkData.userId === currentUser.uid) {
-      return;
-    }
-
-    if (linkData.accepted) {
-      return;
-    }
-
-    var confirmAccept = confirm('收到来自 ' + (linkData.userDisplayName || linkData.userEmail) + ' 的连接请求，是否接受？');
-    if (confirmAccept) {
-      await acceptLink(linkId);
-      alert('连接成功！');
-      loadLinkedUsers();
-      loadDiaries();
-      refreshCalendar();
-    }
-  } catch (error) {
-    console.error('处理链接失败:', error);
-  }
-}
-
-// 加载待处理链接
-async function loadPendingLinks() {
-  var pendingLinks = document.getElementById('pendingLinks');
-  pendingLinks.innerHTML = '';
-
-  // 查找发给我的未被接受的链接
-  var snapshot = await db.collection('links')
-    .where('accepted', '==', false)
-    .get();
-
-  var myPendingLinks = snapshot.docs.filter(function(doc) {
-    return doc.data().userId !== currentUser.uid;
-  });
-
-  if (myPendingLinks.length === 0) {
-    pendingLinks.innerHTML = '<div style="font-size:13px;color:rgba(255,255,255,0.3)">没有待处理的链接请求</div>';
-    return;
-  }
-
-  myPendingLinks.forEach(function(doc) {
-    var data = doc.data();
-    var item = document.createElement('div');
-    item.className = 'pending-item';
-    item.innerHTML = '<div class="user-info"><span class="user-email">' + (data.userDisplayName || data.userEmail) + '</span><span class="user-status">等待接受</span></div><div><button class="accept-btn" data-id="' + doc.id + '">接受</button><button class="reject-btn" data-id="' + doc.id + '">拒绝</button></div>';
-    pendingLinks.appendChild(item);
-  });
-
-  pendingLinks.querySelectorAll('.accept-btn').forEach(function(btn) {
-    btn.addEventListener('click', async function() {
-      await acceptLink(btn.dataset.id);
-      loadPendingLinks();
-      loadLinkedUsers();
-      loadDiaries();
-      refreshCalendar();
+  document.getElementById('copyCodeBtn').addEventListener('click', function() {
+    var code = document.getElementById('myLinkCode').textContent;
+    navigator.clipboard.writeText(code).then(function() {
+      document.getElementById('copyCodeBtn').textContent = '已复制';
+      setTimeout(function() {
+        document.getElementById('copyCodeBtn').textContent = '复制';
+      }, 2000);
     });
   });
 
-  pendingLinks.querySelectorAll('.reject-btn').forEach(function(btn) {
-    btn.addEventListener('click', async function() {
-      await rejectLink(btn.dataset.id);
-      loadPendingLinks();
-    });
+  document.getElementById('connectByCodeBtn').addEventListener('click', async function() {
+    var code = document.getElementById('friendCodeInput').value.trim().toUpperCase();
+    if (!code) {
+      showConnectResult('请输入专属码', true);
+      return;
+    }
+
+    if (code === (currentUserData && currentUserData.linkCode)) {
+      showConnectResult('不能连接自己', true);
+      return;
+    }
+
+    try {
+      // 查找拥有此码的用户
+      var userSnapshot = await db.collection('users').where('linkCode', '==', code).get();
+
+      if (userSnapshot.empty) {
+        showConnectResult('无效的专属码', true);
+        return;
+      }
+
+      var friendDoc = userSnapshot.docs[0];
+      var friendData = friendDoc.data();
+
+      // 检查是否已经连接
+      var existingLinks = await db.collection('links')
+        .where('userId', '==', friendDoc.id)
+        .where('acceptedBy', '==', currentUser.uid)
+        .get();
+
+      if (!existingLinks.empty) {
+        showConnectResult('已经连接过了', true);
+        return;
+      }
+
+      // 创建链接
+      await db.collection('links').add({
+        userId: currentUser.uid,
+        userEmail: currentUser.email,
+        userDisplayName: currentUserData && currentUserData.displayName ? currentUserData.displayName : '',
+        userLinkCode: currentUserData && currentUserData.linkCode ? currentUserData.linkCode : '',
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        accepted: true,
+        acceptedBy: friendDoc.id,
+        acceptedByEmail: friendData.email,
+        acceptedByDisplayName: friendData.displayName || friendData.email
+      });
+
+      showConnectResult('连接成功！');
+      document.getElementById('friendCodeInput').value = '';
+      loadLinkedUsers();
+      loadDiaries();
+      refreshCalendar();
+    } catch (e) {
+      console.error('连接失败:', e);
+      showConnectResult('连接失败', true);
+    }
   });
+
+  // 输入码时自动转大写
+  document.getElementById('friendCodeInput').addEventListener('input', function(e) {
+    e.target.value = e.target.value.toUpperCase();
+  });
+}
+
+function showConnectResult(msg, isError) {
+  var result = document.getElementById('connectResult');
+  result.classList.remove('hidden');
+  result.textContent = msg;
+  result.style.color = isError ? '#ff6b6b' : 'var(--accent)';
 }
 
 // 加载已链接用户
