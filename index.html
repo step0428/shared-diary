@@ -100,7 +100,15 @@
           </button>
         </div>
         <form class="write-form" id="writeForm">
+          <input type="text" id="diaryTitle" placeholder="日记标题（选填）" style="width:100%;padding:12px 14px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:rgba(255,255,255,0.9);font-size:15px;font-family:inherit;margin-bottom:15px;">
           <textarea id="diaryContent" placeholder="今天发生了什么..." required></textarea>
+          <div class="form-row">
+            <label>标签</label>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+              <div id="tagOptions" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+              <button type="button" id="addTagBtn" style="padding:6px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:15px;color:rgba(255,255,255,0.6);font-size:12px;cursor:pointer;">+ 新标签</button>
+            </div>
+          </div>
           <div class="form-row">
             <label>日期</label>
             <input type="date" id="diaryDate" required>
