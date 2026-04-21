@@ -1,6 +1,6 @@
 // 认证状态
-var currentUser = null;
-var currentUserData = null;
+let currentUser = null;
+let currentUserData = null;
 
 // 监听认证状态
 auth.onAuthStateChanged(async function(user) {
@@ -59,10 +59,10 @@ async function showMainApp() {
   }
 
   // 头像裁剪相关变量
-var cropImage = null;
-var cropSelection = { x: 0, y: 0, size: 0 };
-var isDragging = false;
-var dragStart = { x: 0, y: 0 };
+let cropImage = null;
+let cropSelection = { x: 0, y: 0, size: 0 };
+let isDragging = false;
+let dragStart = { x: 0, y: 0 };
 
   // 头像点击上传
   document.getElementById('userAvatar').addEventListener('click', function(e) {
@@ -305,19 +305,19 @@ var dragStart = { x: 0, y: 0 };
     var menu = document.getElementById('userMenuDropdown');
     if (menu) menu.remove();
 
-    var newName = prompt('请输入新名称:', currentUserData && currentUserData.displayName ? currentUserData.displayName : '');
-    if (newName && newName.trim()) {
-      db.collection('users').doc(currentUser.uid).update({
-        displayName: newName.trim()
-      }).then(function() {
-        currentUserData.displayName = newName.trim();
-        document.getElementById('userName').textContent = newName.trim();
-        alert('名称修改成功');
-      }).catch(function(err) {
-        console.error('修改名称失败:', err);
-        alert('修改名称失败');
-      });
-    }
+    showInputModal('修改名称', '请输入新名称', currentUserData && currentUserData.displayName ? currentUserData.displayName : '', function(newName) {
+      if (newName && newName.trim()) {
+        db.collection('users').doc(currentUser.uid).update({
+          displayName: newName.trim()
+        }).then(function() {
+          currentUserData.displayName = newName.trim();
+          document.getElementById('userName').textContent = newName.trim();
+        }).catch(function(err) {
+          console.error('修改名称失败:', err);
+          alert('修改名称失败');
+        });
+      }
+    });
   };
 
   // 显示修改密码弹窗
@@ -433,19 +433,20 @@ async function createLink() {
 // 获取已接受链接
 async function getAcceptedLinks() {
   try {
-    // 获取所有链接，客户端过滤
-    var allLinks = await db.collection('links').where('accepted', '==', true).get();
+    // 执行两次查询然后合并结果
+    var [linksAsCreator, linksAsAccepted] = await Promise.all([
+      db.collection('links').where('userId', '==', currentUser.uid).where('accepted', '==', true).get(),
+      db.collection('links').where('acceptedBy', '==', currentUser.uid).where('accepted', '==', true).get()
+    ]);
 
-    var myLinks = [];
-    allLinks.docs.forEach(function(doc) {
-      var data = doc.data();
-      if (data.userId === currentUser.uid || data.acceptedBy === currentUser.uid) {
-        myLinks.push(doc);
-      }
-    });
+    // 合并并去重（同一个链接可能在两种查询中都出现）
+    var linkMap = new Map();
+    linksAsCreator.docs.forEach(function(doc) { linkMap.set(doc.id, doc); });
+    linksAsAccepted.docs.forEach(function(doc) { linkMap.set(doc.id, doc); });
 
-    return myLinks;
+    return Array.from(linkMap.values());
   } catch (e) {
+    console.error('getAcceptedLinks error:', e);
     return [];
   }
 }
@@ -486,4 +487,30 @@ async function getLinkUserInfo(linkData, isCreator) {
     displayName: isCreator ? (linkData.userDisplayName || linkData.userEmail) : 'unknown',
     avatarUrl: ''
   };
+}
+
+// 批量获取用户信息（解决N+1查询问题）
+async function getBatchUserInfo(userIds) {
+  if (!userIds || userIds.length === 0) return [];
+
+  var uniqueIds = [...new Set(userIds)];
+  var users = [];
+
+  // Firestore的in查询最多10个元素，分批查询
+  var batchSize = 10;
+  for (var i = 0; i < uniqueIds.length; i += batchSize) {
+    var batch = uniqueIds.slice(i, i + batchSize);
+    var docs = await db.collection('users').where(firebase.firestore.FieldPath.documentId(), 'in', batch).get();
+    docs.forEach(function(doc) {
+      var data = doc.data();
+      users.push({
+        userId: doc.id,
+        email: data.email || '',
+        displayName: data.displayName || data.email || 'unknown',
+        avatarUrl: data.avatarUrl || ''
+      });
+    });
+  }
+
+  return users;
 }

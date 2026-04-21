@@ -30,9 +30,13 @@
           <button class="auth-tab" data-tab="register">注册</button>
         </div>
         <form class="auth-form" id="authForm">
+          <label for="email" class="sr-only">邮箱</label>
           <input type="email" id="email" placeholder="邮箱" required>
+          <label for="displayName" class="sr-only">昵称</label>
           <input type="text" id="displayName" class="hidden" placeholder="昵称">
+          <label for="password" class="sr-only">密码</label>
           <input type="password" id="password" placeholder="密码" required>
+          <label for="confirmPassword" class="sr-only">确认密码</label>
           <input type="password" id="confirmPassword" class="hidden" placeholder="确认密码">
           <button type="submit" class="auth-btn" id="authBtn">登录</button>
         </form>
@@ -46,13 +50,13 @@
       <!-- 粒子特效 -->
       <canvas id="particles" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0;"></canvas>
       <!-- 左侧朋友栏 -->
-      <div class="friend-sidebar" id="friendSidebar">
+      <aside class="friend-sidebar" id="friendSidebar">
         <div class="friend-sidebar-header">记录</div>
         <div class="friend-item active" data-filter="all">全部记录</div>
         <div class="friend-item" data-filter="mine">我的记录</div>
         <div class="friend-divider">朋友</div>
         <div id="friendList"></div>
-      </div>
+      </aside>
       <!-- 顶部导航 -->
       <header class="header">
         <div class="header-left">
@@ -81,13 +85,14 @@
       </header>
 
       <!-- 视图切换 -->
-      <div class="view-tabs">
+      <nav class="view-tabs">
         <button class="view-tab active" data-view="diary">记录</button>
         <button class="view-tab" data-view="calendar">日历</button>
-      </div>
+        <button class="view-tab" data-view="anniversary">纪念日</button>
+      </nav>
 
       <!-- 记录视图 -->
-      <div class="diary-view" id="diaryView">
+      <main class="diary-view" id="diaryView">
         <div class="diary-header" style="display:flex;justify-content:space-between;align-items:center;">
           <select id="collectionFilter" style="padding:8px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:13px;font-family:inherit;">
             <option value="" style="color:#000;">全部记录</option>
@@ -107,17 +112,46 @@
         <div id="batchActions" class="hidden" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);margin-bottom:10px;">
           <input type="checkbox" id="selectAllDiary" style="cursor:pointer;">
           <span style="font-size:13px;color:var(--text-secondary);">全选</span>
-          <button class="write-btn" id="deleteSelectedBtn" style="padding:8px 12px;background:rgba(255,100,100,0.15);border:1px solid rgba(255,100,100,0.4);color:#ff6b6b;">
-            删除选中
+          <button class="write-btn" id="deleteSelectedBtn" style="padding:8px 12px;background:rgba(255,100,100,0.15);border:1px solid rgba(255,100,100,0.4);color:#ff6b6b;border-radius:6px;" title="删除选中">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            </svg>
           </button>
         </div>
         <div class="diary-list" id="diaryList"></div>
-      </div>
+      </main>
 
       <!-- 日历视图 -->
-      <div class="calendar-view hidden" id="calendarView">
+      <section class="calendar-view hidden" id="calendarView">
         <div class="calendar-container" id="calendar"></div>
+      </section>
+
+      <!-- 纪念日视图 -->
+      <section class="anniversary-view hidden" id="anniversaryView">
+        <div class="anniversary-header">
+          <h2>纪念日</h2>
+          <button class="icon-btn" id="addAnniversaryBtn" title="添加纪念日">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+          </button>
+        </div>
+        <div class="anniversary-list" id="anniversaryList"></div>
+      </section>
+
+      <!-- 底部状态栏：时间和天气 -->
+      <div class="status-bar" id="statusBar">
+        <div class="greeting-section" id="greetingSection"></div>
+        <div class="weather-section" id="weatherSection">
+          <span class="weather-icon" id="weatherIcon"></span>
+          <span class="weather-temp" id="weatherTemp"></span>
+          <span class="weather-tip" id="weatherTip"></span>
+        </div>
       </div>
+      <!-- 天气效果画布 -->
+      <canvas id="weatherCanvas" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1;"></canvas>
     </div>
 
     <!-- 写记录弹窗 -->
@@ -135,7 +169,11 @@
         </div>
         <form class="write-form" id="writeForm">
           <input type="hidden" id="diaryId" value="">
-          <input type="text" id="diaryTitle" placeholder="记录标题（选填）" style="width:100%;padding:12px 14px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:15px;font-family:inherit;margin-bottom:15px;">
+          <div class="form-row">
+            <label for="diaryTitle" class="sr-only">记录标题</label>
+            <input type="text" id="diaryTitle" placeholder="记录标题（选填）">
+          </div>
+          <label for="diaryContent" class="sr-only">记录内容</label>
           <textarea id="diaryContent" placeholder="今天发生了什么..." required></textarea>
           <div class="form-row">
             <label>标签 <button type="button" id="manageTagsBtn" style="margin-left:8px;padding:4px 10px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:10px;color:var(--text-secondary);font-size:11px;cursor:pointer;">管理</button></label>
@@ -147,13 +185,15 @@
           <div class="form-row">
             <label>日期和时间</label>
             <div style="display:flex;gap:10px;">
-              <input type="date" id="diaryDate" required style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);padding:12px 14px;font-size:14px;font-family:inherit;">
-              <input type="time" id="diaryTime" style="padding:12px 14px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:14px;font-family:inherit;">
+              <label for="diaryDate" class="sr-only">日期</label>
+              <input type="date" id="diaryDate" required>
+              <label for="diaryTime" class="sr-only">时间</label>
+              <input type="time" id="diaryTime">
             </div>
           </div>
           <div class="form-row">
-            <label>合集</label>
-            <select id="diaryCollection" style="padding:12px 14px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:14px;font-family:inherit;width:100%;">
+            <label for="diaryCollection">合集</label>
+            <select id="diaryCollection">
               <option value="">无</option>
             </select>
           </div>
@@ -179,6 +219,15 @@
             <input type="file" id="diaryImage" accept="image/*" multiple>
           </div>
           <div id="imagePreview" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;"></div>
+          <div class="form-row">
+            <label>上传音频 / 录音</label>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+              <input type="file" id="diaryAudio" accept="audio/*" style="flex:1;">
+              <button type="button" id="recordAudioBtn" style="padding:8px 16px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:13px;cursor:pointer;">🎤 录音</button>
+            </div>
+            <div id="audioPreview" style="margin-top:10px;"></div>
+            <div id="recordingStatus" style="margin-top:8px;font-size:12px;color:var(--accent);display:none;"></div>
+          </div>
           <button type="submit" class="submit-btn" id="submitDiaryBtn">保存</button>
         </form>
       </div>
@@ -202,6 +251,29 @@
       </div>
     </div>
 
+    <!-- 通用输入弹窗 -->
+    <div class="modal hidden" id="inputModal" style="z-index:2000;">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content" style="max-width:360px;z-index:2001;">
+        <div class="modal-header">
+          <h3 id="inputModalTitle">输入</h3>
+          <button class="modal-close" id="closeInputModal">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div style="padding:5px 0;">
+          <input type="text" id="inputModalInput" style="width:100%;padding:12px 14px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:14px;font-family:inherit;box-sizing:border-box;">
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+          <button id="inputModalCancel" style="padding:8px 16px;border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--text);cursor:pointer;">取消</button>
+          <button id="inputModalConfirm" style="padding:8px 16px;border:none;border-radius:6px;background:var(--accent);color:#fff;cursor:pointer;">确认</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 合集管理弹窗 -->
     <div class="modal hidden" id="collectionModal">
       <div class="modal-backdrop"></div>
@@ -215,10 +287,10 @@
             </svg>
           </button>
         </div>
-        <div id="collectionList" style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px;"></div>
-        <div style="display:flex;gap:10px;">
-          <input type="text" id="newCollectionName" placeholder="新合集名称" style="flex:1;padding:12px 14px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:14px;font-family:inherit;">
-          <button type="button" id="addCollectionBtn" style="padding:12px 20px;background:var(--accent-light);border:1px solid var(--accent);border-radius:8px;color:var(--accent);font-size:14px;cursor:pointer;">添加</button>
+        <div id="collectionList" class="collection-list"></div>
+        <div class="collection-form">
+          <input type="text" id="newCollectionName" placeholder="新合集名称">
+          <button type="button" id="addCollectionBtn">添加</button>
         </div>
       </div>
     </div>
@@ -270,6 +342,7 @@
           <h4>添加连接</h4>
           <p class="link-hint">输入对方的专属码进行连接</p>
           <div class="code-input-row">
+            <label for="friendCodeInput" class="sr-only">专属码</label>
             <input type="text" id="friendCodeInput" placeholder="输入专属码" maxlength="6" style="text-transform:uppercase;">
             <button class="create-link-btn" id="connectByCodeBtn">连接</button>
           </div>
@@ -297,8 +370,9 @@
           <div class="comments-header">评论</div>
           <div class="comments-list" id="commentsList"></div>
           <div class="comment-form">
-            <input type="text" id="commentInput" placeholder="写评论..." style="flex:1;padding:10px 14px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:20px;color:var(--text-primary);font-size:14px;font-family:inherit;">
-            <button id="sendCommentBtn" style="padding:10px 16px;background:var(--accent-light);border:1px solid var(--accent);border-radius:20px;color:var(--accent);cursor:pointer;margin-left:8px;">发送</button>
+            <label for="commentInput" class="sr-only">写评论</label>
+            <input type="text" id="commentInput" placeholder="写评论...">
+            <button id="sendCommentBtn">发送</button>
           </div>
         </div>
       </div>
@@ -347,6 +421,67 @@
     </div>
   </div>
 
+    <!-- 纪念日弹窗 -->
+    <div class="modal hidden" id="anniversaryModal">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="anniversaryModalTitle">添加纪念日</h3>
+          <button class="modal-close" id="closeAnniversaryModal">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <input type="hidden" id="anniversaryId">
+        <div class="form-row">
+          <label>图标标识</label>
+          <div id="anniversaryIconSelect" style="display:flex;gap:15px;font-size:24px;cursor:pointer;user-select:none;margin-bottom:10px;">
+            <span class="icon-option selected" data-icon="💝">💝</span>
+            <span class="icon-option" data-icon="🎂">🎂</span>
+            <span class="icon-option" data-icon="💼">💼</span>
+            <span class="icon-option" data-icon="📚">📚</span>
+            <span class="icon-option" data-icon="🎉">🎉</span>
+            <span class="icon-option" data-icon="🌟">🌟</span>
+          </div>
+        </div>
+        <div class="form-row">
+          <label for="anniversaryTitle">纪念日名称</label>
+          <input type="text" id="anniversaryTitle" placeholder="例如：在一起的第一天">
+        </div>
+        <div class="form-row">
+          <label for="anniversaryDate">日期</label>
+          <input type="date" id="anniversaryDate">
+        </div>
+        <div class="form-row">
+          <label><input type="checkbox" id="anniversaryRepeating"> 每年重复</label>
+        </div>
+        <div class="form-row">
+          <label>可见性</label>
+          <select id="anniversaryVisibility">
+            <option value="public">所有人可见</option>
+            <option value="shared">仅链接对象可见</option>
+            <option value="private">仅自己可见</option>
+          </select>
+        </div>
+        <div class="form-row hidden" id="anniversaryShareSelectRow">
+          <label>分享给</label>
+          <div class="share-list" id="anniversaryShareList"></div>
+        </div>
+        <div class="form-row">
+          <label><input type="checkbox" id="anniversaryCoAuthorCheck"> 共同纪念日</label>
+          <div id="anniversaryCoAuthorsHint" style="font-size:12px;color:var(--text-muted);margin-top:5px;display:none;">选择共同庆祝的好友（可多选）</div>
+          <div id="anniversaryCoAuthorsList" style="display:none;flex-direction:column;gap:8px;max-height:150px;overflow-y:auto;"></div>
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;">
+          <button id="deleteAnniversaryBtn" class="hidden" style="padding:10px 16px;background:rgba(255,100,100,0.15);border:1px solid rgba(255,100,100,0.4);color:#ff6b6b;border-radius:6px;cursor:pointer;margin-right:auto;">删除</button>
+          <button id="cancelAnniversaryBtn" style="padding:10px 16px;border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--text);cursor:pointer;">取消</button>
+          <button id="saveAnniversaryBtn" style="padding:10px 16px;border:none;border-radius:6px;background:var(--accent);color:#fff;cursor:pointer;">保存</button>
+        </div>
+      </div>
+    </div>
+
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
@@ -355,6 +490,8 @@
   <script src="js/auth.js"></script>
   <script src="js/diary.js"></script>
   <script src="js/calendar.js"></script>
+  <script src="js/anniversary.js"></script>
+  <script src="js/sensing.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

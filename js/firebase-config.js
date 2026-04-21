@@ -13,3 +13,6 @@ firebase.initializeApp(firebaseConfig);
 
 const auth = firebase.auth();
 const db = firebase.firestore();
+
+// Cloudinary 配置
+const CLOUDINARY_CLOUD_NAME = 'dx21h5ymk';

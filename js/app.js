@@ -15,7 +15,9 @@ function initApp() {
   setupSidebarFilter();
   setupToggleSidebar();
   initCalendar();
+  initAnniversary();
   initParticles();
+  initSensing();
 
   // 隐藏加载动画
   setTimeout(function() {
@@ -66,7 +68,7 @@ function setupMultiSelectDelete() {
       return;
     }
 
-    deleteBtn.textContent = '删除中...';
+    var originalContent = deleteBtn.innerHTML;
     deleteBtn.disabled = true;
 
     var ids = [];
@@ -81,7 +83,7 @@ function setupMultiSelectDelete() {
       await db.collection('diaries').doc(ids[i]).delete();
     }
 
-    deleteBtn.textContent = '删除选中';
+    deleteBtn.innerHTML = originalContent;
     deleteBtn.disabled = false;
     selectAllCheckbox.checked = false;
     loadDiaries();
@@ -176,6 +178,17 @@ function setupAuth() {
   });
 }
 
+// 刷新当前激活的视图（日记/日历/纪念日）
+function refreshActiveView() {
+  if (!document.getElementById('diaryView').classList.contains('hidden')) {
+    loadDiaries();
+  } else if (!document.getElementById('calendarView').classList.contains('hidden')) {
+    refreshCalendar();
+  } else if (!document.getElementById('anniversaryView').classList.contains('hidden')) {
+    loadAnniversaries();
+  }
+}
+
 // 渲染左侧朋友栏
 function renderFriendSidebar() {
   var friendList = document.getElementById('friendList');
@@ -190,7 +203,7 @@ function renderFriendSidebar() {
   });
 
   // 异步加载朋友列表
-  getAcceptedLinks().then(function(acceptedLinks) {
+  getAcceptedLinks().then(async function(acceptedLinks) {
     friendList.innerHTML = '';
     console.log('Accepted links count:', acceptedLinks.length);
     if (acceptedLinks.length === 0) {
@@ -198,53 +211,58 @@ function renderFriendSidebar() {
       return;
     }
 
-    var fragment = document.createDocumentFragment();
-    var promises = [];
-
+    // 收集所有需要获取的用户ID
+    var otherUserIds = [];
+    var linkMap = [];
     for (var i = 0; i < acceptedLinks.length; i++) {
       var linkDoc = acceptedLinks[i];
       var linkData = linkDoc.data();
       var isCreator = linkData.userId === currentUser.uid;
-      (function(doc, data, creator) {
-        var promise = getLinkUserInfo(data, creator).then(function(otherUser) {
-          console.log('Friend user:', otherUser.displayName, otherUser.avatarUrl);
-          var avatarHtml = '';
-          if (otherUser.avatarUrl) {
-            avatarHtml = '<img src="' + otherUser.avatarUrl + '" style="width:24px;height:24px;border-radius:50%;object-fit:cover;margin-right:8px;">';
-          } else {
-            avatarHtml = '<div style="width:24px;height:24px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;margin-right:8px;flex-shrink:0;">' + (otherUser.displayName ? otherUser.displayName.charAt(0).toUpperCase() : '?') + '</div>';
-          }
-
-          var item = document.createElement('div');
-          item.className = 'friend-item';
-          item.dataset.filter = otherUser.userId;
-          item.style.display = 'flex';
-          item.style.alignItems = 'center';
-          item.innerHTML = avatarHtml + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(otherUser.displayName) + '</span>';
-
-          if (currentDiaryFilter === otherUser.userId) {
-            item.classList.add('active');
-          }
-
-          item.addEventListener('click', function() {
-            currentDiaryFilter = otherUser.userId;
-            document.querySelectorAll('.friend-item').forEach(function(el) {
-              el.classList.remove('active');
-            });
-            item.classList.add('active');
-            loadDiaries();
-          });
-
-          fragment.appendChild(item);
-        });
-        promises.push(promise);
-      })(linkDoc, linkData, isCreator);
+      var otherUid = isCreator ? linkData.acceptedBy : linkData.userId;
+      otherUserIds.push(otherUid);
+      linkMap.push({ linkDoc: linkDoc, otherUid: otherUid, userId: currentUser.uid });
     }
 
-    Promise.all(promises).then(function() {
-      friendList.appendChild(fragment);
-      console.log('friendList children count:', friendList.children.length);
-    });
+    // 批量获取用户信息
+    var userInfos = await getBatchUserInfo(otherUserIds);
+    var userMap = {};
+    userInfos.forEach(function(u) { userMap[u.userId] = u; });
+
+    // 渲染朋友列表
+    var fragment = document.createDocumentFragment();
+    for (var j = 0; j < linkMap.length; j++) {
+      var linkDoc = linkMap[j].linkDoc;
+      var otherUid = linkMap[j].otherUid;
+      var otherUser = userMap[otherUid] || { displayName: 'unknown', avatarUrl: '', userId: otherUid };
+
+      var avatarHtml = renderUserAvatar(otherUser, 24, '8px');
+
+      var item = document.createElement('div');
+      item.className = 'friend-item';
+      item.dataset.filter = otherUser.userId;
+      item.style.display = 'flex';
+      item.style.alignItems = 'center';
+      item.innerHTML = avatarHtml + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(otherUser.displayName) + '</span>';
+
+      if (currentDiaryFilter === otherUser.userId) {
+        item.classList.add('active');
+      }
+
+      item.addEventListener('click', function(e) {
+        var clickedItem = e.currentTarget;
+        currentDiaryFilter = clickedItem.dataset.filter;
+        document.querySelectorAll('.friend-item').forEach(function(el) {
+          el.classList.remove('active');
+        });
+        clickedItem.classList.add('active');
+        refreshActiveView();
+      });
+
+      fragment.appendChild(item);
+    }
+
+    friendList.appendChild(fragment);
+    console.log('friendList children count:', friendList.children.length);
   });
 }
 
@@ -259,7 +277,7 @@ function setupSidebarFilter() {
       el.classList.remove('active');
     });
     allDiaryItem.classList.add('active');
-    loadDiaries();
+    refreshActiveView();
   });
 
   myDiaryItem.addEventListener('click', function() {
@@ -268,7 +286,7 @@ function setupSidebarFilter() {
       el.classList.remove('active');
     });
     myDiaryItem.classList.add('active');
-    loadDiaries();
+    refreshActiveView();
   });
 }
 
@@ -296,15 +314,60 @@ function setupModal() {
     document.getElementById('themeModal').classList.add('hidden');
   });
 
+  // 输入模态框
+  document.getElementById('closeInputModal').addEventListener('click', closeInputModal);
+  document.getElementById('inputModalCancel').addEventListener('click', closeInputModal);
+  document.getElementById('inputModalConfirm').addEventListener('click', confirmInputModal);
+  document.getElementById('inputModalInput').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      confirmInputModal();
+    }
+  });
+
   document.querySelectorAll('.modal-backdrop').forEach(function(backdrop) {
     backdrop.addEventListener('click', function() {
-      backdrop.closest('.modal').classList.add('hidden');
+      var modal = backdrop.closest('.modal');
+      // 如果是写日记弹窗且有内容，自动保存草稿
+      if (modal.id === 'writeModal' && hasDiaryContent()) {
+        saveDiaryDraft();
+      }
+      modal.classList.add('hidden');
     });
   });
 }
 
+// 通用输入模态框
+let inputModalCallback = null;
+
+function showInputModal(title, placeholder, defaultValue, callback) {
+  document.getElementById('inputModalTitle').textContent = title;
+  document.getElementById('inputModalInput').placeholder = placeholder;
+  document.getElementById('inputModalInput').value = defaultValue || '';
+  inputModalCallback = callback;
+  document.getElementById('inputModal').classList.remove('hidden');
+  setTimeout(function() {
+    document.getElementById('inputModalInput').focus();
+  }, 100);
+}
+
+function closeInputModal() {
+  document.getElementById('inputModal').classList.add('hidden');
+  inputModalCallback = null;
+}
+
+function confirmInputModal() {
+  var value = document.getElementById('inputModalInput').value;
+  if (inputModalCallback) {
+    inputModalCallback(value);
+  }
+  closeInputModal();
+}
+
 // 设置写记录
-var selectedImageFiles = [];
+let selectedImageFiles = [];
+let selectedAudioFile = null;
+let mediaRecorder = null;
+let audioChunks = [];
 
 function setupWriteDiary() {
   document.getElementById('writeBtn').addEventListener('click', openWriteModal);
@@ -346,6 +409,78 @@ function setupWriteDiary() {
     renderImagePreview();
   });
 
+  // 音频上传
+  document.getElementById('diaryAudio').addEventListener('change', function(e) {
+    var file = e.target.files[0];
+    if (file) {
+      selectedAudioFile = file;
+      renderAudioPreview();
+    }
+    e.target.value = '';
+  });
+
+  // 录音功能
+  var recordBtn = document.getElementById('recordAudioBtn');
+  var isRecording = false;
+
+  recordBtn.addEventListener('click', async function() {
+    if (isRecording) {
+      // 停止录音
+      if (mediaRecorder) {
+        mediaRecorder.stop();
+      }
+      isRecording = false;
+      recordBtn.textContent = '🎤 录音';
+      recordBtn.style.background = '';
+      return;
+    }
+
+    try {
+      var stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorder = new MediaRecorder(stream);
+      audioChunks = [];
+
+      mediaRecorder.ondataavailable = function(e) {
+        audioChunks.push(e.data);
+      };
+
+      mediaRecorder.onstop = function() {
+        var audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+        selectedAudioFile = new File([audioBlob], 'recording.webm', { type: 'audio/webm' });
+        renderAudioPreview();
+        stream.getTracks().forEach(function(track) { track.stop(); });
+        document.getElementById('recordingStatus').textContent = '';
+        document.getElementById('recordingStatus').style.display = 'none';
+      };
+
+      mediaRecorder.start();
+      isRecording = true;
+      recordBtn.textContent = '⏹ 停止';
+      recordBtn.style.background = 'var(--accent-light)';
+
+      document.getElementById('recordingStatus').textContent = '录音中...';
+      document.getElementById('recordingStatus').style.display = 'block';
+    } catch (err) {
+      console.error('录音失败:', err);
+      alert('无法访问麦克风，请检查权限设置');
+    }
+  });
+
+  function renderAudioPreview() {
+    var preview = document.getElementById('audioPreview');
+    if (!selectedAudioFile) {
+      preview.innerHTML = '';
+      return;
+    }
+    var url = URL.createObjectURL(selectedAudioFile);
+    preview.innerHTML = '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg-tertiary);border-radius:8px;"><audio src="' + url + '" controls style="height:32px;"></audio><button type="button" onclick="removeAudio()" style="padding:4px 12px;background:rgba(255,100,100,0.2);border:1px solid rgba(255,100,100,0.4);border-radius:6px;color:#ff6b6b;cursor:pointer;">删除</button></div>';
+  }
+
+  window.removeAudio = function() {
+    selectedAudioFile = null;
+    document.getElementById('audioPreview').innerHTML = '';
+  };
+
   document.getElementById('writeForm').addEventListener('submit', async function(e) {
     e.preventDefault();
 
@@ -377,11 +512,15 @@ function setupWriteDiary() {
       visibility = 'co-authored'; // 共建记录设置visibility为co-authored
     }
 
+    var audioFile = selectedAudioFile;
+
     try {
-      await saveDiary(content, date, visibility, sharedWith, imageFiles, coAuthors);
+      await saveDiary(content, date, visibility, sharedWith, imageFiles, coAuthors, audioFile);
     } finally {
       submitBtn.textContent = originalText;
       submitBtn.disabled = false;
+      selectedAudioFile = null;
+      selectedImageFiles = [];
     }
   });
 }
@@ -425,11 +564,12 @@ function openWriteModal() {
   selectedImageFiles = [];
   document.getElementById('writeModal').classList.remove('hidden');
   document.getElementById('diaryId').value = '';
+  document.getElementById('writeModalTitle').textContent = '写记录';
   document.getElementById('diaryTitle').value = '';
   document.getElementById('diaryContent').value = '';
   document.getElementById('diaryDate').value = year + '-' + month + '-' + day;
   document.getElementById('diaryTime').value = hours + ':' + minutes;
-  document.getElementById('diaryVisibility').value = 'private';
+  document.getElementById('diaryVisibility').value = 'public';
   document.getElementById('shareSelectRow').classList.add('hidden');
   document.getElementById('diaryImage').value = '';
   document.getElementById('imagePreview').innerHTML = '';
@@ -438,14 +578,32 @@ function openWriteModal() {
   document.getElementById('coAuthorsList').style.display = 'none';
   loadShareUsers();
   renderTagOptions();
+  loadDiaryDraft();
 }
 
-function closeWriteModal() {
+function closeWriteModal(skipConfirm) {
+  // 检查是否有内容（只有不跳过确认时才检查）
+  if (!skipConfirm && hasDiaryContent()) {
+    if (confirm('要将当前内容保存为草稿吗？')) {
+      saveDiaryDraft();
+    } else {
+      clearDiaryDraft();
+    }
+  }
+
   document.getElementById('writeModal').classList.add('hidden');
   selectedImageFiles = [];
+  selectedAudioFile = null;
+  document.getElementById('audioPreview').innerHTML = '';
+  document.getElementById('recordingStatus').textContent = '';
+  document.getElementById('recordingStatus').style.display = 'none';
+  document.getElementById('recordAudioBtn').textContent = '🎤 录音';
+  document.getElementById('recordAudioBtn').style.background = '';
 }
 
-document.getElementById('closeWriteModal').addEventListener('click', closeWriteModal);
+document.getElementById('closeWriteModal').addEventListener('click', function() {
+  closeWriteModal(false);
+});
 
 // 设置链接管理
 function setupLinkManagement() {
@@ -543,15 +701,32 @@ async function loadLinkedUsers() {
     return;
   }
 
+  // 收集所有需要获取的用户ID
+  var otherUserIds = [];
+  var linkMap = []; // 保存链接和对应用户的映射
   for (var i = 0; i < acceptedLinks.length; i++) {
     var linkDoc = acceptedLinks[i];
     var linkData = linkDoc.data();
     var isCreator = linkData.userId === currentUser.uid;
-    var otherUser = await getLinkUserInfo(linkData, isCreator);
+    var otherUid = isCreator ? linkData.acceptedBy : linkData.userId;
+    otherUserIds.push(otherUid);
+    linkMap.push({ linkDoc: linkDoc, otherUid: otherUid });
+  }
+
+  // 批量获取用户信息
+  var userInfos = await getBatchUserInfo(otherUserIds);
+  var userMap = {};
+  userInfos.forEach(function(u) { userMap[u.userId] = u; });
+
+  // 渲染链接用户列表
+  for (var j = 0; j < linkMap.length; j++) {
+    var linkDoc = linkMap[j].linkDoc;
+    var otherUid = linkMap[j].otherUid;
+    var otherUser = userMap[otherUid] || { displayName: 'unknown', avatarUrl: '' };
 
     var item = document.createElement('div');
     item.className = 'linked-item';
-    item.innerHTML = '<div class="user-info"><span class="user-email">' + otherUser.displayName + '</span><span class="user-status">已连接</span></div><button class="unlink-btn" data-id="' + linkDoc.id + '">解除</button>';
+    item.innerHTML = '<div class="user-info"><span class="user-email">' + escapeHtml(otherUser.displayName) + '</span><span class="user-status">已连接</span></div><button class="unlink-btn" data-id="' + linkDoc.id + '">解除</button>';
     linkedUsers.appendChild(item);
   }
 
@@ -572,9 +747,16 @@ function setupViewTabs() {
   var viewTabs = document.querySelectorAll('.view-tab');
   var diaryView = document.getElementById('diaryView');
   var calendarView = document.getElementById('calendarView');
+  var anniversaryView = document.getElementById('anniversaryView');
 
   viewTabs.forEach(function(tab) {
-    tab.addEventListener('click', function() {
+    tab.addEventListener('click', async function() {
+      // 如果写日记弹窗打开且有内容，自动保存草稿
+      var writeModal = document.getElementById('writeModal');
+      if (!writeModal.classList.contains('hidden') && hasDiaryContent()) {
+        saveDiaryDraft();
+      }
+
       viewTabs.forEach(function(t) { t.classList.remove('active'); });
       tab.classList.add('active');
 
@@ -582,10 +764,17 @@ function setupViewTabs() {
       if (view === 'diary') {
         diaryView.classList.remove('hidden');
         calendarView.classList.add('hidden');
-      } else {
+        anniversaryView.classList.add('hidden');
+      } else if (view === 'calendar') {
         diaryView.classList.add('hidden');
         calendarView.classList.remove('hidden');
-        refreshCalendar();
+        anniversaryView.classList.add('hidden');
+        await refreshCalendar();
+      } else if (view === 'anniversary') {
+        diaryView.classList.add('hidden');
+        calendarView.classList.add('hidden');
+        anniversaryView.classList.remove('hidden');
+        loadAnniversaries();
       }
     });
   });
@@ -653,7 +842,7 @@ function initParticles() {
     } else if (theme === 'gold') {
       return { r: 255, g: 215, b: 0, a: 0.5 };
     } else if (theme === 'warm') {
-      return { r: 255, g: 180, b: 195, a: 0.45 };
+      return { r: 255, g: 140, b: 170, a: 0.6 };
     } else if (theme === 'sky') {
       return { r: 100, g: 160, b: 220, a: 0.35 };
     } else if (theme === 'green') {
