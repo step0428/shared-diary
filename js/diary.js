@@ -394,8 +394,17 @@ async function loadDiaries() {
     // 批量获取所有需要的用户信息
     var userIds = [];
     for (var j = 0; j < myDiaries.length; j++) {
-      if (userIds.indexOf(myDiaries[j].data.userId) === -1) {
-        userIds.push(myDiaries[j].data.userId);
+      var data = myDiaries[j].data;
+      if (userIds.indexOf(data.userId) === -1) {
+        userIds.push(data.userId);
+      }
+      // 也收集共建参与者ID
+      if (data.coAuthors && data.coAuthors.length > 0) {
+        for (var ci = 0; ci < data.coAuthors.length; ci++) {
+          if (userIds.indexOf(data.coAuthors[ci]) === -1) {
+            userIds.push(data.coAuthors[ci]);
+          }
+        }
       }
     }
     var userDocs = {};
@@ -417,14 +426,41 @@ async function loadDiaries() {
       var authorName = userData ? (userData.displayName || userData.email) : '未知';
       var authorAvatar = userData && userData.avatarUrl ? userData.avatarUrl : '';
       var isMyDiary = data.userId === currentUser.uid;
+      var isCoAuthored = data.visibility === 'co-authored' && data.coAuthors && data.coAuthors.length > 0;
 
-      // 作者头像HTML
+      // 作者头像HTML（共建记录显示所有参与者头像）
       var authorAvatarHtml = '';
-      if (!isMyDiary) {
+      if (isCoAuthored) {
+        // 共建记录：发起人在上，其他共建者在下
+        var creatorUid = data.userId;
+        var creatorData = userDocs[creatorUid];
+        var creatorName = creatorData ? (creatorData.displayName || creatorData.email || '?') : '?';
+        var creatorAvatar = creatorData && creatorData.avatarUrl || '';
+        var creatorHtml = creatorAvatar
+          ? '<img src="' + creatorAvatar + '" style="width:16px;height:16px;border-radius:50%;object-fit:cover;margin-right:2px;" title="' + escapeHtml(creatorName) + '">'
+          : '<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--accent);font-size:9px;color:#fff;margin-right:2px;" title="' + escapeHtml(creatorName) + '">' + creatorName.charAt(0).toUpperCase() + '</span>';
+
+        var othersHtml = '';
+        for (var ci = 0; ci < data.coAuthors.length; ci++) {
+          var coUid = data.coAuthors[ci];
+          if (coUid === creatorUid) continue;
+          var coUserData = userDocs[coUid];
+          if (coUserData) {
+            var caname = coUserData.displayName || coUserData.email || '?';
+            var caavatar = coUserData.avatarUrl || '';
+            if (caavatar) {
+              othersHtml += '<img src="' + caavatar + '" style="width:16px;height:16px;border-radius:50%;object-fit:cover;margin-right:2px;" title="' + escapeHtml(caname) + '">';
+            } else {
+              othersHtml += '<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--accent);font-size:9px;color:#fff;margin-right:2px;" title="' + escapeHtml(caname) + '">' + caname.charAt(0).toUpperCase() + '</span>';
+            }
+          }
+        }
+        authorAvatarHtml = '<div style="display:flex;align-items:center;gap:2px;flex-wrap:wrap;">' + creatorHtml + othersHtml + '</div>';
+      } else {
         if (authorAvatar) {
-          authorAvatarHtml = '<img src="' + authorAvatar + '" style="width:16px;height:16px;border-radius:50%;object-fit:cover;margin-right:4px;vertical-align:middle;">';
+          authorAvatarHtml = '<img src="' + authorAvatar + '" style="width:16px;height:16px;border-radius:50%;object-fit:cover;margin-right:4px;">';
         } else {
-          authorAvatarHtml = '<span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:var(--accent);line-height:16px;text-align:center;font-size:9px;color:#fff;margin-right:4px;vertical-align:middle;">' + authorName.charAt(0).toUpperCase() + '</span>';
+          authorAvatarHtml = '<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--accent);font-size:9px;color:#fff;margin-right:4px;">' + authorName.charAt(0).toUpperCase() + '</span>';
         }
       }
 
@@ -471,7 +507,7 @@ async function loadDiaries() {
       item.className = 'diary-item';
       item.dataset.id = doc.id;
       var checkboxHtml = isMyDiary ? '<input type="checkbox" class="diary-checkbox" style="margin-right:10px;cursor:pointer;display:none;">' : '';
-      item.innerHTML = '<div class="diary-item-header"><div style="display:flex;align-items:center;">' + checkboxHtml + '<div><span class="diary-date">' + dateStr + '</span>' + (!isMyDiary ? '<span class="diary-author" style="display:inline-flex;align-items:center;">' + authorAvatarHtml + authorName + '</span>' : '') + tagHtml + '</div></div><span class="diary-visibility">' + visibilityText + '</span></div>' + titleHtml + '<div class="diary-preview">' + escapeHtml(data.content.substring(0, 150)) + (data.content.length > 150 ? '...' : '') + '</div>' + imageHtml;
+      item.innerHTML = '<div class="diary-item-header"><div style="display:flex;align-items:center;">' + checkboxHtml + '<div><span class="diary-date">' + dateStr + '</span><span class="diary-author" style="display:inline-flex;align-items:center;margin-left:8px;vertical-align:middle;">' + authorAvatarHtml + ((isCoAuthored || isMyDiary) ? '' : authorName) + '</span>' + tagHtml + '</div></div><span class="diary-visibility">' + visibilityText + '</span></div>' + titleHtml + '<div class="diary-preview">' + escapeHtml(data.content.substring(0, 150)) + (data.content.length > 150 ? '...' : '') + '</div>' + imageHtml;
 
       var isCoAuthor = data.coAuthors && data.coAuthors.indexOf(currentUser.uid) !== -1;
       (function(diaryId, isMine, isCoAuthor) {
@@ -509,10 +545,52 @@ async function showDiaryDetail(diaryId, isMine, isCoAuthor) {
 
   // 显示作者头像和名称
   var authorHtml = '';
-  if (authorAvatar) {
-    authorHtml = '<img src="' + authorAvatar + '" style="width:20px;height:20px;border-radius:50%;object-fit:cover;margin-right:6px;vertical-align:middle;">';
+  if (data.visibility === 'co-authored' && data.coAuthors && data.coAuthors.length > 0) {
+    // 共建记录：发起人单独一行，其他共建者在下面
+    var authorPromises = data.coAuthors.map(function(uid) {
+      return db.collection('users').doc(uid).get();
+    });
+    var authorDocs = await Promise.all(authorPromises);
+
+    var creatorDoc = authorDocs.find(function(ad) { return ad.id === data.userId; });
+    var otherDocs = authorDocs.filter(function(ad) { return ad.id !== data.userId; });
+
+    var creatorHtml = '';
+    var othersHtml = '';
+
+    if (creatorDoc && creatorDoc.exists) {
+      var cdata = creatorDoc.data();
+      var cname = cdata.displayName || cdata.email || '未知';
+      var cavatar = cdata.avatarUrl || '';
+      if (cavatar) {
+        creatorHtml = '<img src="' + cavatar + '" style="width:20px;height:20px;border-radius:50%;object-fit:cover;" title="' + escapeHtml(cname) + '">';
+      } else {
+        creatorHtml = '<span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--accent);font-size:11px;color:#fff;" title="' + escapeHtml(cname) + '">' + cname.charAt(0).toUpperCase() + '</span>';
+      }
+    }
+
+    if (otherDocs.length > 0) {
+      var otherAvatars = [];
+      for (var oi = 0; oi < otherDocs.length; oi++) {
+        var odata = otherDocs[oi].data();
+        var oname = odata.displayName || odata.email || '?';
+        var oavatar = odata.avatarUrl || '';
+        if (oavatar) {
+          otherAvatars.push('<img src="' + oavatar + '" style="width:20px;height:20px;border-radius:50%;object-fit:cover;" title="' + escapeHtml(oname) + '">');
+        } else {
+          otherAvatars.push('<span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--accent);font-size:11px;color:#fff;" title="' + escapeHtml(oname) + '">' + oname.charAt(0).toUpperCase() + '</span>');
+        }
+      }
+      othersHtml = otherAvatars.join('');
+    }
+
+    authorHtml = '<div style="display:flex;align-items:center;gap:4px;margin-left:8px;margin-top:-20px;">' + creatorHtml + othersHtml + '</div>';
   } else {
-    authorHtml = '<div style="width:20px;height:20px;border-radius:50%;background:var(--accent);display:inline-flex;align-items:center;justify-content:center;font-size:11px;color:#fff;margin-right:6px;vertical-align:middle;">' + authorName.charAt(0).toUpperCase() + '</div>';
+    if (authorAvatar) {
+      authorHtml = '<div style="display:flex;align-items:center;gap:6px;margin-left:8px;margin-top:-20px;"><img src="' + authorAvatar + '" style="width:20px;height:20px;border-radius:50%;object-fit:cover;"></div>';
+    } else {
+      authorHtml = '<div style="display:flex;align-items:center;gap:6px;margin-left:8px;margin-top:-20px;"><span style="display:flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--accent);font-size:11px;color:#fff;">' + authorName.charAt(0).toUpperCase() + '</span></div>';
+    }
   }
 
   var date = data.date.toDate();
@@ -547,7 +625,7 @@ async function showDiaryDetail(diaryId, isMine, isCoAuthor) {
   }
 
   var content = document.getElementById('diaryDetailContent');
-  content.innerHTML = '<div class="diary-meta"><span>' + dateStr + '</span><span style="display:inline-flex;align-items:center;">' + authorHtml + authorName + '</span></div>' + titleHtml + tagHtml + '<div class="diary-detail-text">' + escapeHtml(data.content) + '</div>' + imageHtml + '<div style="margin-top:15px;">' + editBtnHtml + deleteBtnHtml + '</div>';
+  content.innerHTML = '<div class="diary-meta"><span>' + dateStr + '</span>' + authorHtml + '</div>' + titleHtml + tagHtml + '<div class="diary-detail-text">' + escapeHtml(data.content) + '</div>' + imageHtml + '<div style="margin-top:15px;">' + editBtnHtml + deleteBtnHtml + '</div>';
 
   if (isMine) {
     document.getElementById('editDiaryBtn').addEventListener('click', function() {
@@ -608,7 +686,7 @@ async function loadComments(diaryId) {
       function renderCommentItem(doc) {
         var comment = doc.data();
         var time = comment.createdAt ? comment.createdAt.toDate() : new Date();
-        var timeStr = time.getFullYear() + '.' + String(time.getMonth() + 1).padStart(2, '0') + '.' + String(time.getDate()).padStart(2, '0');
+        var timeStr = time.getFullYear() + '.' + String(time.getMonth() + 1).padStart(2, '0') + '.' + String(time.getDate()).padStart(2, '0') + ' ' + String(time.getHours()).padStart(2, '0') + ':' + String(time.getMinutes()).padStart(2, '0');
         var avatar = comment.userAvatar || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="%2364b4ff" width="100" height="100" rx="50"/><text y="60" x="50" text-anchor="middle" font-size="40" fill="%23fff">?</text></svg>';
 
         var canDelete = currentUser.uid === diaryOwnerId || currentUser.uid === comment.userId;

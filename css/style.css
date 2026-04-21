@@ -1066,11 +1066,58 @@ body {
   margin-bottom: 25px;
   padding-bottom: 15px;
   border-bottom: 1px solid var(--border);
+  align-items: center;
 }
 
-.diary-meta span {
+.diary-meta > span,
+.diary-meta > div {
   font-size: 13px;
   color: var(--text-muted);
+}
+
+.author-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.author-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.author-avatar-fallback {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: #fff;
+}
+
+.author-name {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.author-creator-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.author-others {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 2px;
 }
 
 /* 评论样式 */

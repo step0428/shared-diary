@@ -192,19 +192,22 @@ function renderFriendSidebar() {
   // 异步加载朋友列表
   getAcceptedLinks().then(function(acceptedLinks) {
     friendList.innerHTML = '';
+    console.log('Accepted links count:', acceptedLinks.length);
     if (acceptedLinks.length === 0) {
       friendList.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:10px;">暂无链接的朋友</div>';
       return;
     }
 
     var fragment = document.createDocumentFragment();
+    var promises = [];
 
     for (var i = 0; i < acceptedLinks.length; i++) {
       var linkDoc = acceptedLinks[i];
       var linkData = linkDoc.data();
       var isCreator = linkData.userId === currentUser.uid;
       (function(doc, data, creator) {
-        getLinkUserInfo(data, creator).then(function(otherUser) {
+        var promise = getLinkUserInfo(data, creator).then(function(otherUser) {
+          console.log('Friend user:', otherUser.displayName, otherUser.avatarUrl);
           var avatarHtml = '';
           if (otherUser.avatarUrl) {
             avatarHtml = '<img src="' + otherUser.avatarUrl + '" style="width:24px;height:24px;border-radius:50%;object-fit:cover;margin-right:8px;">';
@@ -234,10 +237,14 @@ function renderFriendSidebar() {
 
           fragment.appendChild(item);
         });
+        promises.push(promise);
       })(linkDoc, linkData, isCreator);
     }
 
-    friendList.appendChild(fragment);
+    Promise.all(promises).then(function() {
+      friendList.appendChild(fragment);
+      console.log('friendList children count:', friendList.children.length);
+    });
   });
 }
 
@@ -367,6 +374,7 @@ function setupWriteDiary() {
         }
       });
       coAuthors.push(currentUser.uid); // 创建者也是共建者
+      visibility = 'co-authored'; // 共建记录设置visibility为co-authored
     }
 
     try {
