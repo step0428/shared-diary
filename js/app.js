@@ -21,6 +21,7 @@ function initApp() {
   initParticles();
   initSensing();
   setupPullToRefresh();
+  setupRefreshButton();
 
   // 隐藏加载动画
   setTimeout(function() {
@@ -30,50 +31,72 @@ function initApp() {
 
 // 设置移动端下拉刷新 (Pull-to-Refresh)
 function setupPullToRefresh() {
-  var diaryView = document.getElementById('diaryView');
-  var ptrContainer = document.createElement('div');
-  ptrContainer.id = 'ptrContainer';
-  ptrContainer.innerHTML = '↓ 下拉刷新';
-  ptrContainer.style.cssText = 'height:0px; overflow:hidden; transition:height 0.3s; display:flex; justify-content:center; align-items:center; color:var(--text-secondary); font-size:13px;';
-  diaryView.insertBefore(ptrContainer, diaryView.firstChild);
+  var views = ['diaryView', 'calendarView', 'anniversaryView'];
+  
+  views.forEach(function(viewId) {
+    var view = document.getElementById(viewId);
+    if (!view) return;
 
-  var startY = 0, currentY = 0, isPulling = false;
+    var ptrContainer = document.createElement('div');
+    ptrContainer.className = 'ptr-container';
+    ptrContainer.innerHTML = '↓ 下拉刷新';
+    ptrContainer.style.cssText = 'height:0px; overflow:hidden; transition:height 0.3s; display:flex; justify-content:center; align-items:center; color:var(--text-secondary); font-size:13px;';
+    view.insertBefore(ptrContainer, view.firstChild);
 
-  diaryView.addEventListener('touchstart', function(e) {
-    if (diaryView.scrollTop <= 0) {
-      startY = e.touches[0].clientY;
-      isPulling = true;
-      ptrContainer.style.transition = 'none';
-    }
-  }, {passive: true});
+    var startY = 0, currentY = 0, isPulling = false;
 
-  diaryView.addEventListener('touchmove', function(e) {
-    if (!isPulling) return;
-    currentY = e.touches[0].clientY;
-    var diff = currentY - startY;
-    if (diff > 0 && diaryView.scrollTop <= 0) {
-      if(e.cancelable) e.preventDefault(); // 阻止浏览器原生下拉
-      ptrContainer.style.height = Math.min(diff * 0.4, 60) + 'px';
-      ptrContainer.innerHTML = diff > 60 ? '↑ 松开刷新' : '↓ 下拉刷新';
-    } else {
+    view.addEventListener('touchstart', function(e) {
+      var scrollTop = view.scrollTop || document.documentElement.scrollTop || window.scrollY || 0;
+      if (scrollTop <= 0) {
+        startY = e.touches[0].clientY;
+        isPulling = true;
+        ptrContainer.style.transition = 'none';
+      }
+    }, {passive: true});
+
+    view.addEventListener('touchmove', function(e) {
+      if (!isPulling) return;
+      currentY = e.touches[0].clientY;
+      var diff = currentY - startY;
+      var scrollTop = view.scrollTop || document.documentElement.scrollTop || window.scrollY || 0;
+      if (diff > 0 && scrollTop <= 0) {
+        if(e.cancelable) e.preventDefault(); // 阻止浏览器原生下拉
+        ptrContainer.style.height = Math.min(diff * 0.4, 60) + 'px';
+        ptrContainer.innerHTML = diff > 60 ? '↑ 松开刷新' : '↓ 下拉刷新';
+      } else {
+        isPulling = false;
+      }
+    }, {passive: false});
+
+    view.addEventListener('touchend', function(e) {
+      if (!isPulling) return;
       isPulling = false;
-    }
-  }, {passive: false});
-
-  diaryView.addEventListener('touchend', function(e) {
-    if (!isPulling) return;
-    isPulling = false;
-    ptrContainer.style.transition = 'height 0.3s';
-    var diff = currentY - startY;
-    if (diff > 60) {
-      ptrContainer.style.height = '40px';
-      ptrContainer.innerHTML = '⏳ 刷新中...';
-      refreshActiveView();
-      setTimeout(function() { ptrContainer.style.height = '0px'; }, 1000);
-    } else {
-      ptrContainer.style.height = '0px';
-    }
+      ptrContainer.style.transition = 'height 0.3s';
+      var diff = currentY - startY;
+      if (diff > 60) {
+        ptrContainer.style.height = '40px';
+        ptrContainer.innerHTML = '⏳ 刷新中...';
+        refreshActiveView();
+        setTimeout(function() { ptrContainer.style.height = '0px'; }, 1000);
+      } else {
+        ptrContainer.style.height = '0px';
+      }
+    });
   });
+}
+
+// 设置全局刷新按钮
+function setupRefreshButton() {
+  var refreshBtn = document.getElementById('refreshBtn');
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', function() {
+      refreshBtn.classList.add('spin-anim');
+      // 整个页面强制刷新
+      setTimeout(function() {
+        window.location.reload();
+      }, 300); // 稍微给点时间让转圈动画显示一下
+    });
+  }
 }
 
 // 设置多选删除
