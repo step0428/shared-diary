@@ -14,6 +14,7 @@ function initApp() {
   setupCollectionModal();
   setupTheme();
   setupMultiSelectDelete();
+  setupAISettings();
   setupSidebarFilter();
   setupToggleSidebar();
   initCalendar();
@@ -43,12 +44,14 @@ function setupPullToRefresh() {
     ptrContainer.style.cssText = 'height:0px; overflow:hidden; transition:height 0.3s; display:flex; justify-content:center; align-items:center; color:var(--text-secondary); font-size:13px;';
     view.insertBefore(ptrContainer, view.firstChild);
 
-    var startY = 0, currentY = 0, isPulling = false;
+    var startX = 0, startY = 0, currentY = 0, isPulling = false;
 
     view.addEventListener('touchstart', function(e) {
       var scrollTop = view.scrollTop || document.documentElement.scrollTop || window.scrollY || 0;
       if (scrollTop <= 0) {
+        startX = e.touches[0].clientX;
         startY = e.touches[0].clientY;
+        currentY = startY; // 初始化 currentY，防止只有点击时算出巨大的偏差
         isPulling = true;
         ptrContainer.style.transition = 'none';
       }
@@ -56,15 +59,19 @@ function setupPullToRefresh() {
 
     view.addEventListener('touchmove', function(e) {
       if (!isPulling) return;
+      var currentX = e.touches[0].clientX;
       currentY = e.touches[0].clientY;
-      var diff = currentY - startY;
+      var dx = currentX - startX;
+      var dy = currentY - startY;
       var scrollTop = view.scrollTop || document.documentElement.scrollTop || window.scrollY || 0;
-      if (diff > 0 && scrollTop <= 0) {
+      
+      // 必须是垂直往下拉，且下拉幅度大于左右滑动幅度
+      if (dy > 0 && dy > Math.abs(dx) && scrollTop <= 0) {
         if(e.cancelable) e.preventDefault(); // 阻止浏览器原生下拉
-        ptrContainer.style.height = Math.min(diff * 0.4, 60) + 'px';
-        ptrContainer.innerHTML = diff > 60 ? '↑ 松开刷新' : '↓ 下拉刷新';
+        ptrContainer.style.height = Math.min(dy * 0.3, 60) + 'px'; // 增加阻尼
+        ptrContainer.innerHTML = dy > 70 ? '↑ 松开刷新' : '↓ 下拉刷新'; // 提高触发阈值
       } else {
-        isPulling = false;
+        if (dy < 0) isPulling = false; // 如果往上滑，取消刷新状态
       }
     }, {passive: false});
 
@@ -72,8 +79,8 @@ function setupPullToRefresh() {
       if (!isPulling) return;
       isPulling = false;
       ptrContainer.style.transition = 'height 0.3s';
-      var diff = currentY - startY;
-      if (diff > 60) {
+      var dy = currentY - startY;
+      if (dy > 70) {
         ptrContainer.style.height = '40px';
         ptrContainer.innerHTML = '⏳ 刷新中...';
         refreshActiveView();
@@ -162,6 +169,47 @@ function setupMultiSelectDelete() {
     selectAllCheckbox.checked = false;
     loadDiaries();
   });
+}
+
+async function loadAISettings() {
+  if (!currentUser) return;
+  try {
+    let doc = await db.collection('users').doc(currentUser.uid).get();
+    if (doc.exists) {
+      let data = doc.data();
+      document.getElementById('aiApiKey').value = data.aiApiKey || '';
+      document.getElementById('aiPersonaName').value = data.aiPersonaName || '';
+      document.getElementById('aiPersonaPrompt').value = data.aiPersonaPrompt || '';
+    }
+  } catch (e) {
+    console.error('加载 AI 设置失败:', e);
+  }
+}
+
+function closeAISettingsModal() {
+  var modal = document.getElementById('aiSettingsModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+async function saveAISettings() {
+  if (!currentUser) return;
+  try {
+    await db.collection('users').doc(currentUser.uid).update({
+      aiApiKey: document.getElementById('aiApiKey').value.trim(),
+      aiPersonaName: document.getElementById('aiPersonaName').value.trim(),
+      aiPersonaPrompt: document.getElementById('aiPersonaPrompt').value.trim()
+    });
+    alert('AI 助手设置已保存！');
+    closeAISettingsModal();
+  } catch (e) {
+    console.error('保存 AI 设置失败:', e);
+    alert('保存 AI 设置失败: ' + e.message);
+  }
+}
+
+function setupAISettings() {
+  var saveBtn = document.getElementById('saveAISettingsBtn');
+  if (saveBtn) saveBtn.addEventListener('click', saveAISettings);
 }
 
 // 设置认证
@@ -386,6 +434,7 @@ function setupModal() {
   document.getElementById('closeLinkModal').addEventListener('click', function() {
     document.getElementById('linkModal').classList.add('hidden');
   });
+  document.getElementById('closeAISettingsModal').addEventListener('click', closeAISettingsModal);
 
   document.getElementById('closeThemeModal').addEventListener('click', function() {
     document.getElementById('themeModal').classList.add('hidden');
@@ -411,12 +460,12 @@ function setupModal() {
           try { audio._audioCtx.close(); } catch(e) {}
           audio._audioCtx = null;
         }
+            modal.classList.add('hidden');
+          } else if (modal.id === 'writeModal') {
+            closeWriteModal(false); // 交给统一的关闭函数处理拦截
+          } else {
+            modal.classList.add('hidden');
       }
-      // 如果是写日记弹窗且有内容，自动保存草稿
-      if (modal.id === 'writeModal' && hasDiaryContent()) {
-        saveDiaryDraft();
-      }
-      modal.classList.add('hidden');
     });
   });
 }
@@ -774,15 +823,64 @@ function openWriteModal() {
   loadShareUsers();
   renderTagOptions();
   loadDiaryDraft();
+
+  setTimeout(function() {
+    if (typeof getDiaryFormState === 'function') {
+      window.currentDiaryFormOriginalState = getDiaryFormState();
+    }
+  }, 100);
 }
 
+window.getDiaryFormState = function() {
+  var sharedWith = [];
+  document.querySelectorAll('#shareList input:checked').forEach(function(cb) { sharedWith.push(cb.value); });
+  var coAuthors = [];
+  document.querySelectorAll('#coAuthorsList input:checked').forEach(function(cb) { coAuthors.push(cb.value); });
+
+  var selectedMoodEl = document.querySelector('.mood-option.selected');
+  var selectedTag = document.querySelector('.tag-select-btn.selected');
+
+  return JSON.stringify({
+    title: document.getElementById('diaryTitle').value.trim(),
+    content: document.getElementById('diaryContent').value.trim(),
+    date: document.getElementById('diaryDate').value,
+    time: document.getElementById('diaryTime').value,
+    visibility: document.getElementById('diaryVisibility').value,
+    mood: selectedMoodEl ? selectedMoodEl.dataset.mood : null,
+    tagId: selectedTag ? selectedTag.dataset.tagId : null,
+    collectionId: document.getElementById('diaryCollection').value,
+    coAuthorCheck: document.getElementById('coAuthorCheck').checked,
+    sharedWith: sharedWith.sort(),
+    coAuthors: coAuthors.sort(),
+    imagesCount: selectedImageFiles.length,
+    hasAudio: !!selectedAudioFile
+  });
+};
+
 function closeWriteModal(skipConfirm) {
-  // 检查是否有内容（只有不跳过确认时才检查）
-  if (!skipConfirm && hasDiaryContent()) {
-    if (confirm('要将当前内容保存为草稿吗？')) {
-      saveDiaryDraft();
+  var diaryId = document.getElementById('diaryId').value;
+  
+  if (!skipConfirm) {
+    if (!diaryId) {
+      // 新建记录：检查是否有内容并询问草稿
+      if (hasDiaryContent()) {
+        if (confirm('要将当前内容保存为草稿吗？')) {
+          saveDiaryDraft();
+        } else {
+          clearDiaryDraft();
+        }
+      }
     } else {
-      clearDiaryDraft();
+      // 编辑现有记录：检查是否修改并询问是否保存
+      if (typeof getDiaryFormState === 'function' && window.currentDiaryFormOriginalState) {
+        var currentState = getDiaryFormState();
+        if (currentState !== window.currentDiaryFormOriginalState) {
+          if (confirm('检测到内容已被修改，是否保存并发布更新？\n(点击"取消"将放弃本次修改)')) {
+            document.getElementById('submitDiaryBtn').click();
+            return; // 中断后续流程，等待提交完毕后自动关闭
+          }
+        }
+      }
     }
   }
 
@@ -954,10 +1052,10 @@ function setupViewTabs() {
 
   viewTabs.forEach(function(tab) {
     tab.addEventListener('click', async function() {
-      // 如果写日记弹窗打开且有内容，自动保存草稿
+          // 如果写记录弹窗开着，统一交由 closeWriteModal 处理状态拦截
       var writeModal = document.getElementById('writeModal');
-      if (!writeModal.classList.contains('hidden') && hasDiaryContent()) {
-        saveDiaryDraft();
+      if (!writeModal.classList.contains('hidden')) {
+            closeWriteModal(false);
       }
 
       viewTabs.forEach(function(t) { t.classList.remove('active'); });

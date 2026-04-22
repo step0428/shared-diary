@@ -14,5 +14,8 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
+// 特殊的 AI 用户ID，用于识别 AI 评论
+const AI_COMPANION_USER_ID = 'AI_COMPANION_USER_ID';
+
 // Cloudinary 配置
 const CLOUDINARY_CLOUD_NAME = 'dx21h5ymk';

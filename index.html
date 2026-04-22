@@ -440,6 +440,45 @@
             <button id="sendCommentBtn">发送</button>
           </div>
         </div>
+      <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--border);text-align:center;">
+        <button id="askAICommentBtn" style="padding:10px 20px;background:var(--accent-light);border:1px solid var(--accent);border-radius:8px;color:var(--accent);cursor:pointer;font-size:14px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><path d="M12 8V4H8"></path><path d="M16 16.24L12 20V16.24"></path><path d="M15.34 15.34L18.66 18.66"></path><path d="M7.34 7.34L4 4"></path><path d="M12 12H12.01"></path><path d="M12 12L16 8"></path><path d="M12 12L8 16"></path><path d="M12 12L15.34 15.34"></path><path d="M12 12L7.34 7.34"></path></svg>
+          让AI评论
+        </button>
+      </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI 设置弹窗 -->
+  <div class="modal hidden" id="aiSettingsModal">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content" style="max-width:450px;">
+      <div class="modal-header">
+        <h3>AI 助手设置</h3>
+        <button class="modal-close" id="closeAISettingsModal">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="form-row">
+        <label for="aiApiKey">OpenAI API Key</label>
+        <input type="password" id="aiApiKey" placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">
+        <p style="font-size:12px;color:var(--text-muted);margin-top:5px;">您的 API Key 将安全存储在您的账户中，不会被公开。</p>
+      </div>
+      <div class="form-row">
+        <label for="aiPersonaName">AI 助手名称</label>
+        <input type="text" id="aiPersonaName" placeholder="例如：小助手、小爱同学">
+      </div>
+      <div class="form-row">
+        <label for="aiPersonaPrompt">AI 助手人设 Prompt</label>
+        <textarea id="aiPersonaPrompt" rows="5" placeholder="例如：你是一个温柔体贴的日记助手，会根据日记内容给出积极的评论和鼓励。"></textarea>
+        <p style="font-size:12px;color:var(--text-muted);margin-top:5px;">设定 AI 的性格和回复风格。</p>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;">
+        <button id="saveAISettingsBtn" style="padding:10px 20px;border:none;border-radius:8px;background:var(--accent);color:#fff;cursor:pointer;">保存设置</button>
       </div>
     </div>
   </div>

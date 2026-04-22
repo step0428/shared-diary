@@ -4,6 +4,8 @@ function renderUserAvatar(userData, size, marginRight, title) {
   let titleAttr = title ? ' title="' + escapeHtml(title) + '"' : '';
   if (userData && userData.avatarUrl) {
     return '<img src="' + userData.avatarUrl + '" style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;object-fit:cover;margin-right:' + marginRight + ';"' + titleAttr + '>';
+  } else if (userData && userData.userId === AI_COMPANION_USER_ID) { // AI 助手的特殊头像
+    return '<span style="display:inline-flex;align-items:center;justify-content:center;width:' + size + 'px;height:' + size + 'px;border-radius:50%;background:#8e44ad;font-size:' + Math.floor(size * 0.6) + 'px;color:#fff;margin-right:' + marginRight + ';"' + titleAttr + '>🤖</span>';
   } else {
     let name = userData ? (userData.displayName || userData.email || '?') : '?';
     return '<span style="display:inline-flex;align-items:center;justify-content:center;width:' + size + 'px;height:' + size + 'px;border-radius:50%;background:var(--accent);font-size:' + Math.floor(size * 0.6) + 'px;color:#fff;margin-right:' + marginRight + ';"' + titleAttr + '>' + name.charAt(0).toUpperCase() + '</span>';
@@ -643,28 +645,55 @@ async function loadDiaries() {
         // 移动端手势左滑删除
         if (isMine) {
           let startX = 0, currentX = 0, isSwiping = false;
+          let startY = 0, currentY = 0; // 用于判断是否是垂直滚动
+          let isDragging = false; // 标记手指是否按下并开始拖动
+          const TAP_THRESHOLD = 10; // 区分点击和滑动的阈值（像素）
+
           contentEl.addEventListener('touchstart', function(e) {
             if(e.touches.length > 1) return;
             startX = e.touches[0].clientX;
-            isSwiping = true;
-            contentEl.style.transition = 'none';
-            if (deleteBtn) deleteBtn.style.opacity = '1'; // 手指按下时才显示红色底板
-          }, {passive: true});
-          contentEl.addEventListener('touchmove', function(e) {
-            if(!isSwiping) return;
-            currentX = e.touches[0].clientX;
-            let diff = currentX - startX;
-            if (diff < 0) {
-              contentEl.style.transform = 'translateX(' + Math.max(diff, -90) + 'px)';
-            } else {
-              contentEl.style.transform = 'translateX(0)';
-            }
-          }, {passive: true});
-          contentEl.addEventListener('touchend', function(e) {
-            if(!isSwiping) return;
+            startY = e.touches[0].clientY;
+            isDragging = true;
             isSwiping = false;
+            contentEl.style.transition = 'none';
+          }, {passive: true});
+
+          contentEl.addEventListener('touchmove', function(e) {
+            if (!isDragging) return;
+            currentX = e.touches[0].clientX;
+            currentY = e.touches[0].clientY;
+            let dx = currentX - startX;
+            let dy = currentY - startY;
+
+            if (!isSwiping) {
+              if (Math.abs(dx) > TAP_THRESHOLD && Math.abs(dx) > Math.abs(dy)) {
+                isSwiping = true;
+                if (deleteBtn) deleteBtn.style.opacity = '1'; // 只有确认在左滑时才显示红色底板
+                if (e.cancelable) e.preventDefault(); // 阻止默认的滚动行为
+              } else if (Math.abs(dy) > TAP_THRESHOLD) {
+                isDragging = false;
+                contentEl.style.transform = 'translateX(0)';
+                if (deleteBtn) deleteBtn.style.opacity = '0';
+                return;
+              }
+            }
+
+            if (isSwiping) {
+              if (e.cancelable) e.preventDefault(); // 持续阻止默认滚动
+              if (dx < 0) { // 只允许向左滑动
+                contentEl.style.transform = 'translateX(' + Math.max(dx, -90) + 'px)';
+              } else { // 向右滑动则复位
+                contentEl.style.transform = 'translateX(0)';
+              }
+            }
+          }, {passive: false}); // passive: false 允许调用 preventDefault
+
+          contentEl.addEventListener('touchend', function(e) {
+            if (!isDragging) return; // 如果之前被判断为滚动，则不处理
+            isDragging = false;
             contentEl.style.transition = 'transform 0.3s ease';
-            if (currentX - startX < -40) {
+
+            if (isSwiping && currentX - startX < -40) { // 确认是滑动且滑动距离足够
               contentEl.style.transform = 'translateX(-80px)';
               if (deleteBtn) deleteBtn.style.opacity = '1';
               // 自动关闭其他打开的滑块
@@ -763,6 +792,8 @@ async function showDiaryDetail(diaryId, isMine, isCoAuthor) {
   let editBtnHtml = isMine ? '<button id="editDiaryBtn" style="margin-top:20px;margin-right:10px;padding:10px 20px;background:let(--accent-light);border:1px solid var(--accent);border-radius:8px;color:var(--accent);cursor:pointer;">编辑</button>' : '';
   let deleteBtnHtml = isMine ? '<button id="deleteDiaryBtn" style="margin-top:20px;padding:10px 20px;background:rgba(255,100,100,0.2);border:1px solid rgba(255,100,100,0.4);border-radius:8px;color:#ff6b6b;cursor:pointer;">删除</button>' : '';
 
+  let askAICommentBtn = '<button id="askAICommentBtn" style="margin-top:20px;padding:10px 20px;background:var(--accent-light);border:1px solid var(--accent);border-radius:8px;color:var(--accent);cursor:pointer;font-size:14px;margin-left:10px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><path d="M12 8V4H8"></path><path d="M16 16.24L12 20V16.24"></path><path d="M15.34 15.34L18.66 18.66"></path><path d="M7.34 7.34L4 4"></path><path d="M12 12H12.01"></path><path d="M12 12L16 8"></path><path d="M12 12L8 16"></path><path d="M12 12L15.34 15.34"></path><path d="M12 12L7.34 7.34"></path></svg>让AI评论</button>';
+
   let imageHtml = '';
   let imageCount = data.imageUrls ? data.imageUrls.length : (data.imageUrl ? 1 : 0);
   if (imageCount > 0) {
@@ -782,8 +813,8 @@ async function showDiaryDetail(diaryId, isMine, isCoAuthor) {
       '</div>';
   }
 
-  let content = document.getElementById('diaryDetailContent');
-  content.innerHTML = '<div class="diary-meta"><span>' + dateStr + '</span>' + authorHtml + '</div>' + titleHtml + tagHtml + '<div class="diary-detail-text">' + escapeHtml(data.content) + '</div>' + imageHtml + audioHtml + '<div style="margin-top:15px;">' + editBtnHtml + deleteBtnHtml + '</div>';
+  let contentEl = document.getElementById('diaryDetailContent');
+  contentEl.innerHTML = '<div class="diary-meta"><span>' + dateStr + '</span>' + authorHtml + '</div>' + titleHtml + tagHtml + '<div class="diary-detail-text">' + escapeHtml(data.content) + '</div>' + imageHtml + audioHtml + '<div style="margin-top:15px;display:flex;justify-content:flex-end;">' + editBtnHtml + deleteBtnHtml + askAICommentBtn + '</div>';
 
   if (isMine) {
     document.getElementById('editDiaryBtn').addEventListener('click', function() {
@@ -794,6 +825,10 @@ async function showDiaryDetail(diaryId, isMine, isCoAuthor) {
         deleteDiary(diaryId);
       }
     });
+  }
+
+  if (document.getElementById('askAICommentBtn')) {
+    document.getElementById('askAICommentBtn').addEventListener('click', function() { askAIToComment(diaryId, data.content); });
   }
 
   // 加载评论
@@ -945,14 +980,15 @@ async function loadComments(diaryId) {
         let comment = doc.data();
         let time = comment.createdAt ? comment.createdAt.toDate() : new Date();
         let timeStr = time.getFullYear() + '.' + String(time.getMonth() + 1).padStart(2, '0') + '.' + String(time.getDate()).padStart(2, '0') + ' ' + String(time.getHours()).padStart(2, '0') + ':' + String(time.getMinutes()).padStart(2, '0');
-        let avatar = comment.userAvatar || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="%2364b4ff" width="100" height="100" rx="50"/><text y="60" x="50" text-anchor="middle" font-size="40" fill="%23fff">?</text></svg>';
+        let commentAuthorInfo = { userId: comment.userId, displayName: comment.userDisplayName, avatarUrl: comment.userAvatar };
+        let avatarHtml = renderUserAvatar(commentAuthorInfo, 32);
 
         let canDelete = currentUser.uid === diaryOwnerId || currentUser.uid === comment.userId;
 
         let item = document.createElement('div');
         item.className = 'comment-item';
         item.dataset.commentId = doc.id;
-        item.innerHTML = '<img class="comment-avatar" src="' + avatar + '"><div class="comment-body"><div class="comment-header"><span class="comment-author">' + escapeHtml(comment.userDisplayName || '匿名') + '</span><span class="comment-time">' + timeStr + '</span></div><div class="comment-content">' + escapeHtml(comment.content) + '</div><div class="comment-actions"><button class="reply-btn" data-id="' + doc.id + '">回复</button>' + (canDelete ? '<button class="delete-comment-btn" data-id="' + doc.id + '">删除</button>' : '') + '</div></div>';
+        item.innerHTML = avatarHtml + '<div class="comment-body"><div class="comment-header"><span class="comment-author">' + escapeHtml(comment.userDisplayName || '匿名') + '</span><span class="comment-time">' + timeStr + '</span></div><div class="comment-content">' + escapeHtml(comment.content) + '</div><div class="comment-actions"><button class="reply-btn" data-id="' + doc.id + '">回复</button>' + (canDelete ? '<button class="delete-comment-btn" data-id="' + doc.id + '">删除</button>' : '') + '</div></div>';
         return item;
       }
 
@@ -1004,7 +1040,7 @@ async function loadComments(diaryId) {
       let commentId = this.dataset.id;
       showInputModal('回复', '请输入回复内容', '', function(replyContent) {
         if (replyContent && replyContent.trim()) {
-          addComment(currentDiaryIdForComment, replyContent.trim(), commentId);
+          addComment(currentDiaryIdForComment, replyContent.trim(), commentId, currentUser.uid, currentUserData.displayName, currentUserData.avatarUrl);
         }
       });
     };
@@ -1021,7 +1057,7 @@ async function loadComments(diaryId) {
 }
 
 // 添加评论或回复
-async function addComment(diaryId, content, parentCommentId) {
+async function addComment(diaryId, content, parentCommentId, authorId, authorDisplayName, authorAvatar) {
   try {
     // 获取日记主人ID
     let diaryDoc = await db.collection('diaries').doc(diaryId).get();
@@ -1030,9 +1066,9 @@ async function addComment(diaryId, content, parentCommentId) {
     await db.collection('comments').add({
       diaryId: diaryId,
       diaryOwnerId: diaryOwnerId,
-      userId: currentUser.uid,
-      userDisplayName: currentUserData && currentUserData.displayName ? currentUserData.displayName : currentUser.email,
-      userAvatar: currentUserData && currentUserData.avatarUrl ? currentUserData.avatarUrl : '',
+      userId: authorId || currentUser.uid,
+      userDisplayName: authorDisplayName || (currentUserData && currentUserData.displayName ? currentUserData.displayName : currentUser.email),
+      userAvatar: authorAvatar || (currentUserData && currentUserData.avatarUrl ? currentUserData.avatarUrl : ''),
       content: content,
       parentCommentId: parentCommentId || null,
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -1041,6 +1077,71 @@ async function addComment(diaryId, content, parentCommentId) {
   } catch (e) {
     console.error('评论发送失败:', e);
     alert('评论发送失败');
+  }
+}
+
+// AI 评论功能
+async function askAIToComment(diaryId, diaryContent) {
+  const askAICommentBtn = document.getElementById('askAICommentBtn');
+  const originalBtnText = askAICommentBtn.innerHTML;
+  askAICommentBtn.disabled = true;
+  askAICommentBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="spin-anim" style="vertical-align:middle;margin-right:5px;"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path></svg>AI思考中...';
+
+  try {
+    const userDoc = await db.collection('users').doc(currentUser.uid).get();
+    const userData = userDoc.data();
+    const aiApiKey = userData.aiApiKey;
+    const aiPersonaName = userData.aiPersonaName || 'AI 助手';
+    const aiPersonaPrompt = userData.aiPersonaPrompt || '你是一个温柔体贴的日记助手，会根据日记内容给出积极的评论和鼓励。';
+
+    if (!aiApiKey || aiApiKey.length < 10) { // Basic check for API key validity
+      alert('请先在用户菜单 -> AI 助手设置中配置有效的 OpenAI API Key！');
+      return;
+    }
+
+    const systemMessage = {
+      role: "system",
+      content: aiPersonaPrompt
+    };
+
+    const userMessage = {
+      role: "user",
+      content: `这是一篇日记内容：\n\n"${diaryContent}"\n\n请你以${aiPersonaName}的身份，对这篇日记发表一句简短的评论，字数控制在50字以内，语气要符合你的人设。`
+    };
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${aiApiKey}`
+      },
+      body: JSON.stringify({
+        model: "gpt-3.5-turbo", // 可以根据需要更换模型，如 "gpt-4o"
+        messages: [systemMessage, userMessage],
+        max_tokens: 150, // 限制回复长度
+        temperature: 0.7 // 创造性
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('OpenAI API Error:', errorData);
+      throw new Error(`AI 评论失败: ${errorData.error.message || response.statusText}`);
+    }
+
+    const data = await response.json();
+    const aiCommentContent = data.choices[0].message.content.trim();
+
+    // 保存 AI 的评论
+    await addComment(diaryId, aiCommentContent, null, AI_COMPANION_USER_ID, aiPersonaName, 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="%238e44ad" width="100" height="100" rx="50"/><text y="60" x="50" text-anchor="middle" font-size="40" fill="%23fff">🤖</text></svg>');
+
+    loadComments(diaryId); // 重新加载评论列表
+  } catch (e) {
+    console.error('请求 AI 评论失败:', e);
+    alert(e.message || '请求 AI 评论失败，请检查网络或 API Key。');
+  } finally {
+    askAICommentBtn.innerHTML = originalBtnText;
+    askAICommentBtn.disabled = false;
   }
 }
 
@@ -1114,29 +1215,33 @@ function editDiary(diaryId) {
 
     renderTagOptions(data.tagId);
 
-    // 加载共享用户并选中已选的
-    loadShareUsers().then(function() {
-      let sharedWith = data.sharedWith || [];
-      sharedWith.forEach(function(userId) {
-        let checkbox = document.querySelector('#shareList input[value="' + userId + '"]');
-        if (checkbox) {
-          checkbox.checked = true;
-          checkbox.closest('.share-item').classList.add('selected');
-        }
-      });
-    });
-
-    // 加载共建用户并选中已选的
-    loadCoAuthors().then(function() {
-      coAuthors.forEach(function(userId) {
-        if (userId !== currentUser.uid) {
-          let checkbox = document.querySelector('#coAuthorsList input[value="' + userId + '"]');
-          if (checkbox) {
-            checkbox.checked = true;
-            checkbox.closest('.share-item').classList.add('selected');
+        // 加载用户复选框并记录原始状态
+        Promise.all([
+          loadShareUsers().then(function() {
+            let sharedWith = data.sharedWith || [];
+            sharedWith.forEach(function(userId) {
+              let checkbox = document.querySelector('#shareList input[value="' + userId + '"]');
+              if (checkbox) {
+                checkbox.checked = true;
+                checkbox.closest('.share-item').classList.add('selected');
+              }
+            });
+          }),
+          loadCoAuthors().then(function() {
+            coAuthors.forEach(function(userId) {
+              if (userId !== currentUser.uid) {
+                let checkbox = document.querySelector('#coAuthorsList input[value="' + userId + '"]');
+                if (checkbox) {
+                  checkbox.checked = true;
+                  checkbox.closest('.share-item').classList.add('selected');
+                }
+              }
+            });
+          })
+        ]).then(function() {
+          if (typeof getDiaryFormState === 'function') {
+            window.currentDiaryFormOriginalState = getDiaryFormState();
           }
-        }
-      });
     });
 
     document.getElementById('writeModalTitle').textContent = '编辑记录';
@@ -1293,29 +1398,6 @@ async function saveDiary(content, date, visibility, sharedWith, imageFiles, coAu
   } else {
     document.getElementById('writeModal').classList.add('hidden');
   }
-}
-
-// 关闭写记录弹窗并重置
-function closeWriteModal(skipConfirm) {
-  // 检查是否有内容
-  if (!skipConfirm && hasDiaryContent()) {
-    if (confirm('要将当前内容保存为草稿吗？')) {
-      saveDiaryDraft();
-    } else {
-      clearDiaryDraft();
-    }
-  }
-
-  document.getElementById('writeModal').classList.add('hidden');
-  document.getElementById('diaryId').value = '';
-  document.getElementById('writeModalTitle').textContent = '写记录';
-  document.getElementById('diaryTitle').value = '';
-  document.getElementById('diaryContent').value = '';
-  document.getElementById('diaryCollection').value = '';
-  document.getElementById('diaryImage').value = '';
-  document.getElementById('imagePreview').innerHTML = '';
-  document.getElementById('diaryAudio').value = '';
-  document.getElementById('audioPreview').innerHTML = '';
 }
 
 // 加载分享用户列表
