@@ -95,7 +95,7 @@ function initCalendar() {
     headerToolbar: {
       left: 'prev,next today',
       center: 'title',
-      right: 'dayGridMonth,timeGridWeek'
+      right: 'dayGridMonth,timeGridWeek,timeGridDay'
     },
     height: 'auto',
     events: [],
@@ -116,6 +116,7 @@ function initCalendar() {
       let avatarUrl = arg.event.extendedProps.avatarUrl;
       let displayName = arg.event.extendedProps.displayName || '';
       let isCoAuthor = arg.event.extendedProps.isCoAuthor;
+      let mood = arg.event.extendedProps.mood;
       let coAuthorAvatars = arg.event.extendedProps.coAuthorAvatars || [];
 
       let html = '<div class="fc-event-main-content" style="display:flex;align-items:center;gap:3px;padding:2px;overflow:hidden;width:100%;box-sizing:border-box;">';
@@ -141,7 +142,8 @@ function initCalendar() {
         html += '<div style="width:16px;height:16px;border-radius:50%;background:#7eb8da;display:flex;align-items:center;justify-content:center;font-size:9px;color:#fff;">' + displayName.charAt(0).toUpperCase() + '</div>';
       }
 
-      html += '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">' + arg.event.title + '</span>';
+      let moodHtml = mood ? '<span style="font-size:13px;margin-right:2px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.2));">' + mood + '</span>' : '';
+      html += moodHtml + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">' + arg.event.title + '</span>';
       html += '</div>';
       return { html: html };
     }
@@ -178,10 +180,13 @@ async function loadCalendarEvents() {
       let data = doc.data();
 
       // 使用通用可见性判断函数
-      if (!isDiaryVisible(data, currentUser.uid, linkedIds, currentDiaryFilter)) continue;
+      let visResult = isDiaryVisible(data, currentUser.uid, linkedIds, activeFilters, { checkAcceptance: true });
+      if (!visResult) continue;
 
       let isMine = data.userId === currentUser.uid;
       let isCoAuthor = data.coAuthors && data.coAuthors.indexOf(currentUser.uid) !== -1;
+      let isPending = isCoAuthor && !isMine && (!data.acceptedCoAuthors || data.acceptedCoAuthors.indexOf(currentUser.uid) === -1);
+      if (isPending) isCoAuthor = false;
 
       // 获取作者信息（从缓存，同步）
       let authorInfo = getUserInfoFromCache(data.userId);
@@ -215,6 +220,7 @@ async function loadCalendarEvents() {
       }
 
       let eventProps = {
+        mood: data.mood,
         diaryId: doc.id,
         isMyDiary: isMine,
         isCoAuthor: isCoAuthor,
@@ -298,7 +304,9 @@ function handleCalendarEventClick(info) {
   // 纪念日点击：打开纪念日编辑
   if (extProps.isAnniversary) {
     let annId = extProps.anniversaryId;
-    openAnniversaryModalById(annId);
+    if (typeof showAnniversaryDetail === 'function') {
+      showAnniversaryDetail(annId);
+    }
     return;
   }
 
@@ -307,24 +315,6 @@ function handleCalendarEventClick(info) {
   let isMine = extProps.isMyDiary;
   let isCoAuthor = extProps.isCoAuthor;
   showDiaryDetail(diaryId, isMine, isCoAuthor);
-}
-
-// 根据ID打开纪念日编辑
-async function openAnniversaryModalById(anniversaryId) {
-  try {
-    let doc = await db.collection('anniversaries').doc(anniversaryId).get();
-    if (doc.exists) {
-      let data = doc.data();
-      openAnniversaryModal({
-        id: doc.id,
-        title: data.title,
-        date: data.date,
-        isRepeating: data.isRepeating
-      });
-    }
-  } catch (e) {
-    console.error('获取纪念日失败:', e);
-  }
 }
 
 // 处理日期点击

@@ -10,6 +10,8 @@ auth.onAuthStateChanged(async function(user) {
     showMainApp();
     loadDiaries();
     loadLinkedUsers();
+    // 登录后检测今天是否有纪念日，触发全屏庆祝
+    if (typeof checkAndTriggerCelebration === 'function') setTimeout(checkAndTriggerCelebration, 1500);
   } else {
     currentUser = null;
     currentUserData = null;
@@ -172,35 +174,51 @@ let dragStart = { x: 0, y: 0 };
   }
 
   // 裁剪画布鼠标事件
-  document.getElementById('cropCanvas').addEventListener('mousedown', function(e) {
-    isDragging = true;
-    var rect = e.target.getBoundingClientRect();
-    dragStart.x = e.clientX - rect.left;
-    dragStart.y = e.clientY - rect.top;
-  });
+  var cropCanvas = document.getElementById('cropCanvas');
 
-  document.addEventListener('mousemove', function(e) {
+  function handleCropDragStart(e) {
+    e.preventDefault();
+    isDragging = true;
+    var clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    var clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    var rect = cropCanvas.getBoundingClientRect();
+    dragStart.x = clientX - rect.left;
+    dragStart.y = clientY - rect.top;
+  }
+
+  function handleCropDragMove(e) {
     if (!isDragging) return;
-    var canvas = document.getElementById('cropCanvas');
-    var rect = canvas.getBoundingClientRect();
-    var x = e.clientX - rect.left;
-    var y = e.clientY - rect.top;
+    e.preventDefault();
+    var clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    var clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    var rect = cropCanvas.getBoundingClientRect();
+    var x = clientX - rect.left;
+    var y = clientY - rect.top;
 
     var dx = x - dragStart.x;
     var dy = y - dragStart.y;
 
-    cropSelection.x = Math.max(0, Math.min(cropSelection.x + dx, canvas.width - cropSelection.size));
-    cropSelection.y = Math.max(0, Math.min(cropSelection.y + dy, canvas.height - cropSelection.size));
+    cropSelection.x = Math.max(0, Math.min(cropSelection.x + dx, cropCanvas.width - cropSelection.size));
+    cropSelection.y = Math.max(0, Math.min(cropSelection.y + dy, cropCanvas.height - cropSelection.size));
 
     dragStart.x = x;
     dragStart.y = y;
 
     drawCropOverlay();
-  });
+  }
 
-  document.addEventListener('mouseup', function() {
+  function handleCropDragEnd() {
     isDragging = false;
-  });
+  }
+
+  cropCanvas.addEventListener('mousedown', handleCropDragStart);
+  cropCanvas.addEventListener('touchstart', handleCropDragStart);
+
+  document.addEventListener('mousemove', handleCropDragMove);
+  document.addEventListener('touchmove', handleCropDragMove);
+
+  document.addEventListener('mouseup', handleCropDragEnd);
+  document.addEventListener('touchend', handleCropDragEnd);
 
   // 确认裁剪
   document.getElementById('confirmCropBtn').addEventListener('click', async function() {
@@ -260,10 +278,17 @@ let dragStart = { x: 0, y: 0 };
 
     var menu = document.createElement('div');
     menu.id = 'userMenuDropdown';
-    menu.style.cssText = 'position:absolute;top:50px;right:60px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:8px 0;min-width:160px;z-index:1000;box-shadow:0 4px 12px rgba(0,0,0,0.15);';
-    menu.innerHTML = '<div class="menu-item" onclick="openLinkModal()" style="padding:10px 16px;cursor:pointer;font-size:14px;color:var(--text);display:flex;align-items:center;gap:8px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>链接管理</div>' +
+    menu.style.cssText = 'position:absolute;top:50px;right:60px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:8px 0;min-width:200px;z-index:1000;box-shadow:0 4px 12px rgba(0,0,0,0.15);';
+    var emailText = currentUser ? currentUser.email : '';
+    var divider = '<div style="height:1px;background:var(--border);margin:6px 0;"></div>';
+    menu.innerHTML = '<div style="padding:8px 16px;border-bottom:1px solid var(--border);font-size:12px;color:var(--text-secondary);">' + escapeHtml(emailText) + '</div>' +
+      '<div class="menu-item" onclick="openLinkModal()" style="padding:10px 16px;cursor:pointer;font-size:14px;color:var(--text);display:flex;align-items:center;gap:8px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>链接管理</div>' +
       '<div class="menu-item" onclick="editUserName()" style="padding:10px 16px;cursor:pointer;font-size:14px;color:var(--text);display:flex;align-items:center;gap:8px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>修改名称</div>' +
       '<div class="menu-item" onclick="showChangePasswordModal()" style="padding:10px 16px;cursor:pointer;font-size:14px;color:var(--text);display:flex;align-items:center;gap:8px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>修改密码</div>' +
+      divider +
+      '<div class="menu-item" id="exportBackupBtn" style="padding:10px 16px;cursor:pointer;font-size:14px;color:var(--text);display:flex;align-items:center;gap:8px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>导出备份</div>' +
+      '<label class="menu-item" id="importBackupLabel" style="padding:10px 16px;cursor:pointer;font-size:14px;color:var(--text);display:flex;align-items:center;gap:8px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>导入备份<input type="file" id="importFileInput" accept=".zip" style="display:none;"></label>' +
+      divider +
       '<div class="menu-item" onclick="logout()" style="padding:10px 16px;cursor:pointer;font-size:14px;color:#ff6b6b;display:flex;align-items:center;gap:8px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>退出登录</div>';
 
     document.body.appendChild(menu);
@@ -273,6 +298,22 @@ let dragStart = { x: 0, y: 0 };
     style.id = 'userMenuStyle';
     style.textContent = '.menu-item:hover{background:var(--hover-bg);}';
     document.head.appendChild(style);
+
+    // Attach event listeners to the newly created elements
+    document.getElementById('exportBackupBtn').addEventListener('click', async function(e) {
+      e.stopPropagation();
+      await exportBackup(e.currentTarget); // Pass the button element
+      closeUserMenu(); // Close menu after action
+    });
+
+    document.getElementById('importFileInput').addEventListener('change', async function(e) {
+      e.stopPropagation();
+      var file = e.target.files[0];
+      if (file) {
+        await importBackup(file, e.currentTarget.closest('label')); // Pass the label element
+        closeUserMenu(); // Close menu after action
+      }
+    });
 
     // 点击其他地方关闭菜单
     setTimeout(function() {
@@ -294,7 +335,8 @@ let dragStart = { x: 0, y: 0 };
 
   function closeUserMenu(e) {
     var menu = document.getElementById('userMenuDropdown');
-    if (menu && !menu.contains(e.target) && e.target.id !== 'userName') {
+    // 如果没有事件对象e，或者点击发生在菜单外部，则关闭菜单
+    if (menu && (!e || (!menu.contains(e.target) && e.target.id !== 'userName'))) {
       menu.remove();
       document.removeEventListener('click', closeUserMenu);
     }

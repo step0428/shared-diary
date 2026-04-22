@@ -10,10 +10,20 @@ function renderUserAvatar(userData, size, marginRight, title) {
   }
 }
 // 判断日记是否对当前用户可见（并结合侧边栏过滤）
-function isDiaryVisible(diaryData, currentUserId, linkedUserIds, filter) {
-  filter = filter || 'all';
+function isDiaryVisible(diaryData, currentUserId, linkedUserIds, filtersArray, options) {
+  options = options || {};
+  var checkAcceptance = options.checkAcceptance || false;
+
+  if (!filtersArray || filtersArray.length === 0) return false; // 什么都没勾选时，什么都不展示
+
   let isMine = diaryData.userId === currentUserId;
   let isCoAuthor = diaryData.coAuthors && diaryData.coAuthors.indexOf(currentUserId) !== -1;
+
+  if (checkAcceptance && isCoAuthor && !isMine) {
+    let isAccepted = diaryData.acceptedCoAuthors && diaryData.acceptedCoAuthors.indexOf(currentUserId) !== -1;
+    if (!isAccepted) isCoAuthor = false;
+  }
+
   let isLinkedAndShared = linkedUserIds.indexOf(diaryData.userId) !== -1 &&
     (diaryData.visibility === 'public' || (diaryData.visibility === 'shared' && diaryData.sharedWith && diaryData.sharedWith.indexOf(currentUserId) !== -1));
 
@@ -21,17 +31,26 @@ function isDiaryVisible(diaryData, currentUserId, linkedUserIds, filter) {
   let visibleToMe = isMine || isCoAuthor || isLinkedAndShared;
   if (!visibleToMe) return false;
 
-  // 2. 侧边栏过滤
-  if (filter === 'all') {
-    return true;
-  } else if (filter === 'mine') {
-    return isMine;
-  } else {
-    // 筛选指定好友：是他创建的，或者他参与共建的
-    let theyAreCreator = diaryData.userId === filter;
-    let theyAreCoAuthor = diaryData.coAuthors && diaryData.coAuthors.indexOf(filter) !== -1;
-    return theyAreCreator || theyAreCoAuthor;
+  // 2. 侧边栏多选过滤
+  let matchesFilter = false;
+  for (let i = 0; i < filtersArray.length; i++) {
+    let filter = filtersArray[i];
+    if (filter === 'mine') {
+      if (isMine || isCoAuthor) {
+        matchesFilter = true;
+        break;
+      }
+    } else {
+      // 筛选指定好友：是他创建的，或者他参与共建的
+      let theyAreCreator = diaryData.userId === filter;
+      let theyAreCoAuthor = diaryData.coAuthors && diaryData.coAuthors.indexOf(filter) !== -1;
+      if (theyAreCreator || theyAreCoAuthor) {
+        matchesFilter = true;
+        break;
+      }
+    }
   }
+  return matchesFilter;
 }
 
 
@@ -427,7 +446,7 @@ async function loadDiaries() {
       let isMine = data.userId === currentUser.uid;
       let isCoAuthor = data.coAuthors && data.coAuthors.indexOf(currentUser.uid) !== -1;
 
-      if (!isDiaryVisible(data, currentUser.uid, linkedIds, currentDiaryFilter)) continue;
+      if (!isDiaryVisible(data, currentUser.uid, linkedIds, activeFilters)) continue;
 
       if (collectionFilter && data.collectionId !== collectionFilter) {
         continue;
@@ -554,22 +573,115 @@ async function loadDiaries() {
       }
       let audioIndicator = data.audioUrl ? '<div style="margin-top:8px;color:let(--text-muted);font-size:12px;">🎵 语音</div>' : '';
 
+      let isPendingCoAuthor = isCoAuthored && !isMyDiary && (!data.acceptedCoAuthors || data.acceptedCoAuthors.indexOf(currentUser.uid) === -1);
+      let pendingHtml = '';
+      if (isPendingCoAuthor) {
+        pendingHtml = '<div style="margin-top:15px;padding-top:15px;border-top:1px dashed var(--border);display:flex;justify-content:space-between;align-items:center;">' +
+          '<span style="font-size:13px;color:var(--accent);">好友邀请你共建此记录</span>' +
+          '<div style="display:flex;gap:10px;">' +
+            '<button class="reject-co-btn" style="padding:6px 16px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:15px;color:var(--text-secondary);font-size:12px;cursor:pointer;">拒绝</button>' +
+            '<button class="accept-co-btn" style="padding:6px 16px;background:var(--accent-light);border:1px solid var(--accent);border-radius:15px;color:var(--accent);font-size:12px;cursor:pointer;">接受</button>' +
+          '</div></div>';
+      }
+
       let item = document.createElement('div');
-      item.className = 'diary-item';
+      item.className = 'diary-item-wrapper';
       item.dataset.id = doc.id;
+      item.style.cssText = 'position:relative; margin-bottom:15px; border-radius:12px; overflow:hidden; border:1px solid var(--border);';
+
       let checkboxHtml = isMyDiary ? '<input type="checkbox" class="diary-checkbox" style="margin-right:10px;cursor:pointer;display:none;">' : '';
-      item.innerHTML = '<div class="diary-item-header"><div style="display:flex;align-items:center;">' + checkboxHtml + '<div><span class="diary-date">' + dateStr + '</span><span class="diary-author" style="display:inline-flex;align-items:center;margin-left:8px;vertical-align:middle;">' + authorAvatarHtml + ((isCoAuthored || isMyDiary) ? '' : authorName) + '</span>' + tagHtml + '</div></div><span class="diary-visibility">' + visibilityText + '</span></div>' + titleHtml + '<div class="diary-preview">' + escapeHtml(data.content.substring(0, 150)) + (data.content.length > 150 ? '...' : '') + '</div>' + imageHtml + audioIndicator;
+      let moodHtml = data.mood ? '<span style="font-size:16px;margin-left:8px;vertical-align:middle;" title="心情">' + data.mood + '</span>' : '';
+      let innerHtml = '<div class="diary-item-header"><div style="display:flex;align-items:center;">' + checkboxHtml + '<div><span class="diary-date">' + dateStr + '</span>' + moodHtml + '<span class="diary-author" style="display:inline-flex;align-items:center;margin-left:8px;vertical-align:middle;">' + authorAvatarHtml + ((isCoAuthored || isMyDiary) ? '' : authorName) + '</span>' + tagHtml + '</div></div><span class="diary-visibility">' + visibilityText + '</span></div>' + titleHtml + '<div class="diary-preview">' + escapeHtml(data.content.substring(0, 150)) + (data.content.length > 150 ? '...' : '') + '</div>' + imageHtml + audioIndicator + pendingHtml;
+
+      // 滑动删除底色按钮层
+      let swipeActionHtml = isMyDiary ? '<div class="swipe-delete-btn" style="position:absolute; right:0; top:0; bottom:0; width:80px; background:#ff6b6b; color:#fff; display:flex; align-items:center; justify-content:center; z-index:1; cursor:pointer; font-size:14px; font-weight:bold; opacity:0; transition:opacity 0.2s;">删除</div>' : '';
+
+      // 可滑动的表面内容层
+      item.innerHTML = swipeActionHtml + '<div class="diary-item-content diary-item" style="margin-bottom:0; border:none; width:100%; box-sizing:border-box; position:relative; z-index:2; transition:transform 0.3s ease; border-radius:12px; background:var(--bg-secondary);">' + innerHtml + '</div>';
 
       let isCoAuthor = data.coAuthors && data.coAuthors.indexOf(currentUser.uid) !== -1;
-      (function(diaryId, isMine, isCoAuthor) {
-        item.addEventListener('click', function(e) {
-          if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
+      let contentEl = item.querySelector('.diary-item-content');
+      let deleteBtn = item.querySelector('.swipe-delete-btn');
+
+      if (deleteBtn) {
+        deleteBtn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          if (confirm('确定要删除这篇记录吗？')) deleteDiary(doc.id);
+        });
+      }
+
+      (function(diaryId, isMine, isCoAuthor, isPending) {
+        if (isPending) {
+          contentEl.querySelector('.accept-co-btn').addEventListener('click', async function(e) {
+            e.stopPropagation();
+            await db.collection('diaries').doc(diaryId).update({ acceptedCoAuthors: firebase.firestore.FieldValue.arrayUnion(currentUser.uid) });
+            loadDiaries();
+            if (typeof refreshCalendar === 'function') refreshCalendar();
+          });
+          contentEl.querySelector('.reject-co-btn').addEventListener('click', async function(e) {
+            e.stopPropagation();
+            await db.collection('diaries').doc(diaryId).update({ coAuthors: firebase.firestore.FieldValue.arrayRemove(currentUser.uid), acceptedCoAuthors: firebase.firestore.FieldValue.arrayRemove(currentUser.uid) });
+            loadDiaries();
+          });
+        }
+        contentEl.addEventListener('click', function(e) {
+          if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT' || e.target.tagName === 'IMG') return;
+          if (isPending) { alert('请先接受共建邀请后再查看详情'); return; }
+          // 如果处于左滑拉开的状态，点击仅恢复原状
+          if (contentEl.style.transform === 'translateX(-80px)') {
+            contentEl.style.transform = 'translateX(0)';
+            if (deleteBtn) deleteBtn.style.opacity = '0';
+            return;
+          }
           showDiaryDetail(diaryId, isMine, isCoAuthor);
         });
-        item.addEventListener('dblclick', function() {
+        contentEl.addEventListener('dblclick', function() {
+          if (isPending) return;
           if (isMine) editDiary(diaryId);
         });
-      })(doc.id, isMyDiary, isCoAuthor);
+
+        // 移动端手势左滑删除
+        if (isMine) {
+          let startX = 0, currentX = 0, isSwiping = false;
+          contentEl.addEventListener('touchstart', function(e) {
+            if(e.touches.length > 1) return;
+            startX = e.touches[0].clientX;
+            isSwiping = true;
+            contentEl.style.transition = 'none';
+            if (deleteBtn) deleteBtn.style.opacity = '1'; // 手指按下时才显示红色底板
+          }, {passive: true});
+          contentEl.addEventListener('touchmove', function(e) {
+            if(!isSwiping) return;
+            currentX = e.touches[0].clientX;
+            let diff = currentX - startX;
+            if (diff < 0) {
+              contentEl.style.transform = 'translateX(' + Math.max(diff, -90) + 'px)';
+            } else {
+              contentEl.style.transform = 'translateX(0)';
+            }
+          }, {passive: true});
+          contentEl.addEventListener('touchend', function(e) {
+            if(!isSwiping) return;
+            isSwiping = false;
+            contentEl.style.transition = 'transform 0.3s ease';
+            if (currentX - startX < -40) {
+              contentEl.style.transform = 'translateX(-80px)';
+              if (deleteBtn) deleteBtn.style.opacity = '1';
+              // 自动关闭其他打开的滑块
+              document.querySelectorAll('.diary-item-content').forEach(function(el) {
+                if (el !== contentEl) {
+                  el.style.transform = 'translateX(0)';
+                  let siblingBtn = el.previousElementSibling;
+                  if (siblingBtn && siblingBtn.classList.contains('swipe-delete-btn')) siblingBtn.style.opacity = '0';
+                }
+              });
+            } else {
+              contentEl.style.transform = 'translateX(0)';
+              if (deleteBtn) deleteBtn.style.opacity = '0'; // 滑回原位时隐藏
+            }
+          });
+        }
+      })(doc.id, isMyDiary, isCoAuthor, isPendingCoAuthor);
 
       diaryList.appendChild(item);
     }
@@ -645,7 +757,8 @@ async function showDiaryDetail(diaryId, isMine, isCoAuthor) {
     }
   }
 
-  let titleHtml = data.title ? '<div class="diary-title-large">' + escapeHtml(data.title) + '</div>' : '';
+  let moodHtml = data.mood ? '<span style="font-size:28px;margin-right:10px;vertical-align:middle;">' + data.mood + '</span>' : '';
+  let titleHtml = data.title ? '<div class="diary-title-large">' + moodHtml + escapeHtml(data.title) + '</div>' : (data.mood ? '<div class="diary-title-large">' + moodHtml + '</div>' : '');
 
   let editBtnHtml = isMine ? '<button id="editDiaryBtn" style="margin-top:20px;margin-right:10px;padding:10px 20px;background:let(--accent-light);border:1px solid var(--accent);border-radius:8px;color:var(--accent);cursor:pointer;">编辑</button>' : '';
   let deleteBtnHtml = isMine ? '<button id="deleteDiaryBtn" style="margin-top:20px;padding:10px 20px;background:rgba(255,100,100,0.2);border:1px solid rgba(255,100,100,0.4);border-radius:8px;color:#ff6b6b;cursor:pointer;">删除</button>' : '';
@@ -663,7 +776,10 @@ async function showDiaryDetail(diaryId, isMine, isCoAuthor) {
 
   let audioHtml = '';
   if (data.audioUrl) {
-    audioHtml = '<div style="margin-top:15px;"><audio src="' + data.audioUrl + '" controls style="width:100%;max-width:400px;"></audio></div>';
+    audioHtml = '<div style="margin-top:15px;background:var(--bg-tertiary);padding:15px;border-radius:12px;display:flex;flex-direction:column;gap:10px;align-items:center;">' +
+      '<canvas id="audioVisualizer" width="300" height="60" style="width:100%;max-width:400px;height:60px;border-radius:8px;background:rgba(0,0,0,0.05);"></canvas>' +
+      '<audio id="diaryAudioPlayer" src="' + data.audioUrl + '" controls crossorigin="anonymous" style="width:100%;max-width:400px;outline:none;"></audio>' +
+      '</div>';
   }
 
   let content = document.getElementById('diaryDetailContent');
@@ -683,7 +799,97 @@ async function showDiaryDetail(diaryId, isMine, isCoAuthor) {
   // 加载评论
   loadComments(diaryId);
 
+  if (data.audioUrl) {
+    setTimeout(function() {
+      setupAudioVisualizer('diaryAudioPlayer', 'audioVisualizer');
+    }, 50);
+  }
+
   document.getElementById('diaryModal').classList.remove('hidden');
+}
+
+// 通用音频波形可视化初始化函数
+function setupAudioVisualizer(audioId, canvasId) {
+  var audio = document.getElementById(audioId);
+  var canvas = document.getElementById(canvasId);
+  if (!audio || !canvas) return;
+
+  // 清理之前绑定在这个音频元素上的上下文，防止卡死和内存泄漏
+  if (audio._audioCtx) {
+    try { audio._audioCtx.close(); } catch(e) {}
+    audio._audioCtx = null;
+  }
+
+  var ctx = canvas.getContext('2d');
+  var barWidth = (canvas.width / 64) * 1.5;
+  
+  var accentColor = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#64b4ff';
+
+  // 画一条默认安静状态的随机起伏线作为占位
+  function drawQuietState() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = accentColor;
+    ctx.globalAlpha = 0.3;
+    var x = 0;
+    for (var i = 0; i < 64; i++) {
+      var h = Math.random() * 4 + 2;
+      ctx.fillRect(x, canvas.height / 2 - h / 2, barWidth, h);
+      x += barWidth + 2;
+    }
+  }
+  drawQuietState();
+
+  var analyser, dataArray, bufferLength, animationId;
+
+  audio.addEventListener('play', function() {
+    if (!audio._audioCtx) {
+      audio._audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      analyser = audio._audioCtx.createAnalyser();
+      try {
+        var audioSource = audio._audioCtx.createMediaElementSource(audio);
+        audioSource.connect(analyser);
+        analyser.connect(audio._audioCtx.destination);
+      } catch(e) {
+        console.error("Web Audio API error:", e);
+      }
+      analyser.fftSize = 128;
+      bufferLength = analyser.frequencyBinCount;
+      dataArray = new Uint8Array(bufferLength);
+    }
+    if (audio._audioCtx.state === 'suspended') {
+      audio._audioCtx.resume();
+    }
+    visualize();
+  });
+
+  audio.addEventListener('pause', function() {
+    cancelAnimationFrame(animationId);
+    drawQuietState();
+  });
+  
+  audio.addEventListener('ended', function() {
+    cancelAnimationFrame(animationId);
+    drawQuietState();
+  });
+
+  function visualize() {
+    if (audio.paused) return;
+    animationId = requestAnimationFrame(visualize);
+    if (analyser && dataArray) {
+      analyser.getByteFrequencyData(dataArray);
+    }
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    var currentX = 0;
+    for (var i = 0; i < (bufferLength || 64); i++) {
+      var val = dataArray ? dataArray[i] : (Math.random() * 30);
+      var barHeight = (val / 255) * canvas.height * 0.8;
+      if (barHeight < 2) barHeight = 2;
+      ctx.fillStyle = accentColor;
+      ctx.globalAlpha = 0.7 + (barHeight / canvas.height) * 0.3;
+      ctx.fillRect(currentX, canvas.height / 2 - barHeight / 2, barWidth, barHeight); // 对称居中绘制
+      currentX += barWidth + 2;
+    }
+  }
 }
 
 // 加载评论
@@ -874,6 +1080,12 @@ function editDiary(diaryId) {
     document.getElementById('diaryTitle').value = data.title || '';
     document.getElementById('diaryContent').value = data.content;
 
+    document.querySelectorAll('.mood-option').forEach(function(el) { el.classList.remove('selected'); });
+    if (data.mood) {
+      let moodEl = document.querySelector('.mood-option[data-mood="' + data.mood + '"]');
+      if (moodEl) moodEl.classList.add('selected');
+    }
+
     let date = data.date.toDate();
     let year = date.getFullYear();
     let month = String(date.getMonth() + 1).padStart(2, '0');
@@ -990,6 +1202,9 @@ async function saveDiary(content, date, visibility, sharedWith, imageFiles, coAu
   let timeInput = document.getElementById('diaryTime').value;
   let collectionId = document.getElementById('diaryCollection').value;
 
+  let selectedMoodEl = document.querySelector('.mood-option.selected');
+  let mood = selectedMoodEl ? selectedMoodEl.dataset.mood : null;
+
   let selectedTag = document.querySelector('.tag-select-btn.selected');
   let tagId = selectedTag ? selectedTag.dataset.tagId : null;
 
@@ -1028,6 +1243,7 @@ async function saveDiary(content, date, visibility, sharedWith, imageFiles, coAu
     time: timeInput,
     visibility: visibility,
     sharedWith: visibility === 'shared' ? sharedWith : [],
+    mood: mood,
     tagId: tagId,
     collectionId: collectionId || null,
     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -1036,10 +1252,20 @@ async function saveDiary(content, date, visibility, sharedWith, imageFiles, coAu
   // 如果是共建记录，添加共建者
   if (coAuthors && coAuthors.length > 0) {
     diaryData.coAuthors = coAuthors;
+    if (diaryId) {
+      diaryData.acceptedCoAuthors = firebase.firestore.FieldValue.arrayUnion(currentUser.uid);
+    } else {
+      diaryData.acceptedCoAuthors = [currentUser.uid];
+    }
 
     // 如果有合集，自动给所有共建者创建这个合集
     if (collectionId) {
       await ensureCollectionForCoAuthors(collectionId, coAuthors);
+    }
+  } else {
+    if (diaryId) {
+      diaryData.coAuthors = firebase.firestore.FieldValue.delete();
+      diaryData.acceptedCoAuthors = firebase.firestore.FieldValue.delete();
     }
   }
 
@@ -1168,6 +1394,7 @@ function saveDiaryDraft() {
     time: document.getElementById('diaryTime').value,
     visibility: document.getElementById('diaryVisibility').value,
     tagId: document.querySelector('.tag-select-btn.selected')?.dataset.tagId || null,
+    mood: document.querySelector('.mood-option.selected')?.dataset.mood || null,
     collectionId: document.getElementById('diaryCollection').value
   };
 
@@ -1189,6 +1416,11 @@ function loadDiaryDraft() {
     document.getElementById('diaryTime').value = draft.time || '';
     document.getElementById('diaryVisibility').value = draft.visibility || 'public';
     document.getElementById('diaryCollection').value = draft.collectionId || '';
+
+    if (draft.mood) {
+      let moodEl = document.querySelector('.mood-option[data-mood="' + draft.mood + '"]');
+      if (moodEl) moodEl.classList.add('selected');
+    }
 
     // 恢复标签选中
     if (draft.tagId) {

@@ -31,12 +31,15 @@ let weatherData = {
 
 // 天气图标映射
 function getWeatherIcon(condition) {
+  let hour = new Date().getHours();
+  let isNight = hour >= 19 || hour < 5;
+
   let icons = {
-    'sunny': '☀️',
+    'sunny': isNight ? '🌙' : '☀️',
     'cloudy': '☁️',
     'rainy': '🌧️',
     'snowy': '❄️',
-    'partly-cloudy': '⛅',
+    'partly-cloudy': isNight ? '☁️' : '⛅',
     'thunderstorm': '⛈️',
     'foggy': '🌫️'
   };
@@ -45,14 +48,17 @@ function getWeatherIcon(condition) {
 
 // 获取天气提示语
 function getWeatherTip(condition) {
+  let hour = new Date().getHours();
+  let isNight = hour >= 19 || hour < 5;
+
   let tips = {
     'rainy': '带伞了吗 不要淋雨',
     'snowy': '记得保暖 路面滑',
     'thunderstorm': '注意安全 减少外出',
     'foggy': '出行注意安全',
-    'sunny': '注意防晒',
+    'sunny': isNight ? '夜色真美，可能看到流星哦' : '注意防晒',
     'cloudy': '今天天气不错',
-    'partly-cloudy': '出门逛逛吧'
+    'partly-cloudy': isNight ? '夜深了，早点休息' : '出门逛逛吧'
   };
   return tips[condition] || '';
 }
@@ -60,19 +66,8 @@ function getWeatherTip(condition) {
 // 获取位置和天气
 async function fetchWeather() {
   try {
-    // 获取位置
-    let position = await new Promise(function(resolve, reject) {
-      navigator.geolocation.getCurrentPosition(resolve, reject, {
-        timeout: 10000,
-        maximumAge: 600000 // 缓存10分钟
-      });
-    });
-
-    let lat = position.coords.latitude;
-    let lon = position.coords.longitude;
-
-    // 使用wttr.in API获取天气（免费无需API key）
-    let response = await fetch('https://wttr.in/' + lat + ',' + lon + '?format=j1');
+    // 先尝试用IP获取位置（无需用户授权）
+    let response = await fetch('https://wttr.in/?format=j1');
     let data = await response.json();
 
     if (data && data.current_condition && data.current_condition[0]) {
@@ -94,6 +89,9 @@ async function fetchWeather() {
         condition = 'partly-cloudy';
       }
 
+      // 强制雨天测试（把下面一行注释掉可恢复正常天气）
+      // condition = 'rainy';
+
       weatherData = {
         temp: temp,
         condition: condition,
@@ -105,13 +103,14 @@ async function fetchWeather() {
     }
   } catch (e) {
     console.error('获取天气失败:', e);
-    // 使用默认天气
+    // 使用默认天气（强制雨天）
     weatherData = {
       temp: '',
-      condition: 'sunny',
+      condition: 'rainy',
       location: ''
     };
     renderWeather();
+    startWeatherEffect('rainy');
   }
 }
 
@@ -130,36 +129,51 @@ let weatherCanvas = null;
 let weatherCtx = null;
 let rainDrops = [];
 let snowflakes = [];
+let meteors = [];
+let stars = [];
 let weatherEffectActive = false;
+let weatherAnimationId = null;
 
 function startWeatherEffect(condition) {
-  if (weatherEffectActive) {
-    stopWeatherEffect();
-  }
+  stopWeatherEffect();
 
   weatherCanvas = document.getElementById('weatherCanvas');
   if (!weatherCanvas) return;
 
   weatherCtx = weatherCanvas.getContext('2d');
   resizeWeatherCanvas();
+  weatherEffectActive = true;
 
+  let hour = new Date().getHours();
+  let isNight = hour >= 19 || hour < 5;
   if (condition === 'rainy' || condition === 'thunderstorm') {
     initRainDrops();
-    weatherEffectActive = true;
     animateRain();
   } else if (condition === 'snowy') {
     initSnowflakes();
-    weatherEffectActive = true;
     animateSnow();
+  } else if (isNight && condition !== 'rainy' && condition !== 'snowy') {
+    initMeteors();
+    animateMeteors();
   } else {
     weatherCanvas.style.display = 'none';
+    weatherEffectActive = false;
   }
 }
 
 function stopWeatherEffect() {
   weatherEffectActive = false;
+  if (weatherAnimationId) {
+    cancelAnimationFrame(weatherAnimationId);
+    weatherAnimationId = null;
+  }
   rainDrops = [];
   snowflakes = [];
+  meteors = [];
+  stars = [];
+  if (weatherCtx && weatherCanvas) {
+    weatherCtx.clearRect(0, 0, weatherCanvas.width, weatherCanvas.height);
+  }
 }
 
 function resizeWeatherCanvas() {
@@ -171,14 +185,16 @@ function resizeWeatherCanvas() {
 
 function initRainDrops() {
   rainDrops = [];
-  let count = window.innerHeight > 600 ? 150 : 80;
+  let count = window.innerWidth < 768 ? 100 : 250; // 根据屏幕宽度响应式生成
   for (let i = 0; i < count; i++) {
     rainDrops.push({
       x: Math.random() * window.innerWidth,
       y: Math.random() * window.innerHeight,
-      length: Math.random() * 20 + 10,
-      speed: Math.random() * 10 + 15,
-      opacity: Math.random() * 0.3 + 0.2
+      length: Math.random() * 20 + 15, // 雨滴长度
+      speedY: Math.random() * 10 + 15, // 垂直速度
+      speedX: Math.random() * 2 - 1,   // 水平风速
+      opacity: Math.random() * 0.4 + 0.1,
+      width: Math.random() * 1.5 + 0.5 // 雨滴粗细
     });
   }
   if (weatherCanvas) weatherCanvas.style.display = 'block';
@@ -188,37 +204,43 @@ function animateRain() {
   if (!weatherEffectActive || !weatherCtx) return;
 
   weatherCtx.clearRect(0, 0, weatherCanvas.width, weatherCanvas.height);
+  weatherCtx.lineCap = 'round';
 
   for (let i = 0; i < rainDrops.length; i++) {
     let drop = rainDrops[i];
 
     weatherCtx.beginPath();
     weatherCtx.moveTo(drop.x, drop.y);
-    weatherCtx.lineTo(drop.x + 1, drop.y + drop.length);
-    weatherCtx.strokeStyle = 'rgba(150, 180, 255, ' + drop.opacity + ')';
-    weatherCtx.lineWidth = 1;
+    // 添加风向倾斜
+    weatherCtx.lineTo(drop.x + drop.speedX * 2, drop.y + drop.length);
+    weatherCtx.strokeStyle = 'rgba(174, 194, 224, ' + drop.opacity + ')';
+    weatherCtx.lineWidth = drop.width;
     weatherCtx.stroke();
 
-    drop.y += drop.speed;
+    drop.y += drop.speedY;
+    drop.x += drop.speedX;
+
     if (drop.y > weatherCanvas.height) {
       drop.y = -drop.length;
       drop.x = Math.random() * weatherCanvas.width;
     }
   }
 
-  requestAnimationFrame(animateRain);
+  weatherAnimationId = requestAnimationFrame(animateRain);
 }
 
 function initSnowflakes() {
   snowflakes = [];
-  let count = window.innerHeight > 600 ? 100 : 50;
+  let count = window.innerWidth < 768 ? 80 : 150;
   for (let i = 0; i < count; i++) {
     snowflakes.push({
       x: Math.random() * window.innerWidth,
       y: Math.random() * window.innerHeight,
       radius: Math.random() * 3 + 1,
-      speed: Math.random() * 2 + 1,
-      wind: Math.random() * 0.5 - 0.25,
+      speed: Math.random() * 1.5 + 0.5,
+      wind: Math.random() * 1 - 0.5, // 基础风向
+      swing: Math.random() * Math.PI * 2, // 摇摆相位
+      swingSpeed: Math.random() * 0.03 + 0.01,
       opacity: Math.random() * 0.5 + 0.3
     });
   }
@@ -235,19 +257,101 @@ function animateSnow() {
 
     weatherCtx.beginPath();
     weatherCtx.arc(flake.x, flake.y, flake.radius, 0, Math.PI * 2);
-    weatherCtx.fillStyle = 'rgba(255, 255, 255, ' + flake.opacity + ')';
+    
+    // 添加柔和的雪花发光边缘
+    let gradient = weatherCtx.createRadialGradient(flake.x, flake.y, 0, flake.x, flake.y, flake.radius);
+    gradient.addColorStop(0, 'rgba(255, 255, 255, ' + flake.opacity + ')');
+    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    
+    weatherCtx.fillStyle = gradient;
     weatherCtx.fill();
 
     flake.y += flake.speed;
-    flake.x += flake.wind;
+    // 结合基础风向和正弦摇摆，呈现飘落感
+    flake.x += flake.wind + Math.sin(flake.swing) * 0.5;
+    flake.swing += flake.swingSpeed;
 
     if (flake.y > weatherCanvas.height) {
       flake.y = -flake.radius;
       flake.x = Math.random() * weatherCanvas.width;
     }
+    if (flake.x > weatherCanvas.width) flake.x = 0;
+    if (flake.x < 0) flake.x = weatherCanvas.width;
   }
 
-  requestAnimationFrame(animateSnow);
+  weatherAnimationId = requestAnimationFrame(animateSnow);
+}
+
+// 初始化流星雨和星空 (夜晚晴天独享)
+function initMeteors() {
+  meteors = [];
+  stars = [];
+  // 背景繁星
+  for (let i = 0; i < 100; i++) {
+    stars.push({
+      x: Math.random() * window.innerWidth,
+      y: Math.random() * window.innerHeight,
+      radius: Math.random() * 1.5,
+      alpha: Math.random(),
+      twinkleSpeed: (Math.random() * 0.05) + 0.01
+    });
+  }
+  if (weatherCanvas) weatherCanvas.style.display = 'block';
+}
+
+function animateMeteors() {
+  if (!weatherEffectActive || !weatherCtx) return;
+  weatherCtx.clearRect(0, 0, weatherCanvas.width, weatherCanvas.height);
+
+  // 绘制闪烁的星星
+  stars.forEach(function(star) {
+    star.alpha += star.twinkleSpeed;
+    if (star.alpha > 1 || star.alpha < 0) star.twinkleSpeed *= -1;
+    weatherCtx.beginPath();
+    weatherCtx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
+    weatherCtx.fillStyle = 'rgba(255, 255, 255, ' + Math.abs(star.alpha) + ')';
+    weatherCtx.fill();
+  });
+
+  // 随机生成流星
+  if (Math.random() < 0.02) { // 约2%的概率每帧产生流星
+    meteors.push({
+      x: Math.random() * window.innerWidth + window.innerWidth / 2, // 从偏右侧上方出现
+      y: Math.random() * (window.innerHeight / 2) - 100,
+      length: Math.random() * 100 + 40,
+      speed: Math.random() * 15 + 10,
+      opacity: 1
+    });
+  }
+
+  // 绘制并移动流星
+  for (let i = meteors.length - 1; i >= 0; i--) {
+    let m = meteors[i];
+    let tailX = m.x + m.length; // 尾巴在右侧
+    let tailY = m.y - m.length; // 尾巴在上方
+
+    let gradient = weatherCtx.createLinearGradient(m.x, m.y, tailX, tailY);
+    gradient.addColorStop(0, 'rgba(255, 255, 255, ' + m.opacity + ')');
+    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
+    weatherCtx.beginPath();
+    weatherCtx.moveTo(m.x, m.y);
+    weatherCtx.lineTo(tailX, tailY);
+    weatherCtx.strokeStyle = gradient;
+    weatherCtx.lineWidth = 1.5;
+    weatherCtx.stroke();
+
+    // 流星向左下方坠落
+    m.x -= m.speed;
+    m.y += m.speed;
+    m.opacity -= 0.015;
+
+    if (m.opacity <= 0 || m.y > weatherCanvas.height || m.x < 0) {
+      meteors.splice(i, 1);
+    }
+  }
+
+  weatherAnimationId = requestAnimationFrame(animateMeteors);
 }
 
 // 初始化天气和问候
@@ -265,3 +369,18 @@ function initSensing() {
     }
   });
 }
+
+// 强制雨天效果（可手动调用测试）
+window.forceRain = function() {
+  setWeatherEffect('rainy');
+};
+
+// 强制雪天效果
+window.forceSnow = function() {
+  setWeatherEffect('snowy');
+};
+
+// 停止天气效果
+window.stopWeather = function() {
+  stopWeatherEffect();
+};

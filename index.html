@@ -10,8 +10,50 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="久刹">
   <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%230a0a12' width='100' height='100' rx='20'/><text y='65' x='50' text-anchor='middle' font-size='50' fill='%2364b4ff'>久</text></svg>">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600&family=Instrument+Serif:ital@0;1&family=Noto+Serif+SC:wght@300;400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400&display=swap" rel="stylesheet">
+  <style>
+    /* 视图切换平滑过渡动画 (类似 iOS App 的微缩放淡入) */
+    .view-enter {
+      animation: viewFadeSlide 0.35s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
+    }
+    @keyframes viewFadeSlide {
+      from { opacity: 0; transform: translateY(12px) scale(0.98); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    
+    /* 所有模态框弹窗的丝滑滑出动画 */
+    .modal:not(.hidden) .modal-backdrop {
+      animation: fadeIn 0.3s ease forwards;
+    }
+    .modal:not(.hidden) .modal-content {
+      animation: modalFadeSlideUp 0.4s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
+    }
+    @keyframes modalFadeSlideUp {
+      from { opacity: 0; transform: translateY(40px) scale(0.95); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    
+    /* 心情选项交互样式 */
+    .mood-option { opacity: 0.4; transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1); display: inline-block; }
+    .mood-option:hover { opacity: 0.8; transform: scale(1.1); }
+    .mood-option.selected { opacity: 1; transform: scale(1.3); }
+    
+    /* 让日历的默认背景色完美融入当前主题 */
+    .fc {
+      --fc-page-bg-color: var(--bg-primary);
+      --fc-neutral-bg-color: var(--bg-tertiary);
+    }
+    /* 专门修复周/日视图左上角空白格的背景色 */
+    .fc .fc-timegrid-axis,
+    .fc .fc-timegrid-axis-cushion {
+      background-color: var(--bg-primary) !important;
+    }
+  </style>
 </head>
 <body>
   <div id="app">
@@ -21,11 +63,17 @@
     </div>
 
     <!-- 登录/注册页 -->
-    <div class="auth-page" id="authPage">
-      <div class="auth-box">
-        <h1 class="auth-title">久刹</h1>
+    <div class="auth-page view-enter" id="authPage">
+      <!-- 电影级视频背景 -->
+      <video autoplay loop muted playsinline class="auth-bg-video">
+        <source src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260307_083826_e938b29f-a43a-41ec-a153-3d4730578ab8.mp4" type="video/mp4">
+      </video>
+      <div class="auth-bg-overlay"></div>
+      
+      <div class="auth-box liquid-glass">
+        <h1 class="auth-title">Jiu Sha</h1>
         <p class="auth-subtitle">记录在一起的每一天</p>
-        <div class="auth-tabs">
+        <div class="auth-tabs liquid-glass" style="border-radius: 9999px;">
           <button class="auth-tab active" data-tab="login">登录</button>
           <button class="auth-tab" data-tab="register">注册</button>
         </div>
@@ -38,22 +86,23 @@
           <input type="password" id="password" placeholder="密码" required>
           <label for="confirmPassword" class="sr-only">确认密码</label>
           <input type="password" id="confirmPassword" class="hidden" placeholder="确认密码">
-          <button type="submit" class="auth-btn" id="authBtn">登录</button>
+          <button type="submit" class="auth-btn liquid-glass-strong" id="authBtn">登录</button>
         </form>
         <p class="auth-error" id="authError"></p>
-        <p class="auth-link" id="forgotPasswordLink" style="display:none;cursor:pointer;color:var(--accent);font-size:13px;margin-top:10px;">忘记密码？</p>
+        <p class="auth-link" id="forgotPasswordLink" style="display:none;cursor:pointer;color:rgba(255,255,255,0.6);font-size:13px;margin-top:15px;transition:color 0.3s;">忘记密码？</p>
       </div>
     </div>
 
     <!-- 主应用 -->
-    <div class="main-app hidden" id="mainApp">
+    <div class="main-app hidden sidebar-collapsed" id="mainApp">
       <!-- 粒子特效 -->
       <canvas id="particles" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0;"></canvas>
+      <!-- 庆祝特效画布 -->
+      <canvas id="celebrationCanvas" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9999;display:none;"></canvas>
       <!-- 左侧朋友栏 -->
       <aside class="friend-sidebar" id="friendSidebar">
         <div class="friend-sidebar-header">记录</div>
-        <div class="friend-item active" data-filter="all">全部记录</div>
-        <div class="friend-item" data-filter="mine">我的记录</div>
+        <div class="friend-item active" data-filter="mine">我的记录</div>
         <div class="friend-divider">朋友</div>
         <div id="friendList"></div>
       </aside>
@@ -92,7 +141,7 @@
       </nav>
 
       <!-- 记录视图 -->
-      <main class="diary-view" id="diaryView">
+      <main class="diary-view view-enter" id="diaryView">
         <div class="diary-header" style="display:flex;justify-content:space-between;align-items:center;">
           <select id="collectionFilter" style="padding:8px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:13px;font-family:inherit;">
             <option value="" style="color:#000;">全部记录</option>
@@ -123,12 +172,12 @@
       </main>
 
       <!-- 日历视图 -->
-      <section class="calendar-view hidden" id="calendarView">
+      <section class="calendar-view hidden view-enter" id="calendarView">
         <div class="calendar-container" id="calendar"></div>
       </section>
 
       <!-- 纪念日视图 -->
-      <section class="anniversary-view hidden" id="anniversaryView">
+      <section class="anniversary-view hidden view-enter" id="anniversaryView">
         <div class="anniversary-header">
           <h2>纪念日</h2>
           <button class="icon-btn" id="addAnniversaryBtn" title="添加纪念日">
@@ -175,6 +224,16 @@
           </div>
           <label for="diaryContent" class="sr-only">记录内容</label>
           <textarea id="diaryContent" placeholder="今天发生了什么..." required></textarea>
+          <div class="form-row">
+            <label>心情</label>
+            <div id="moodSelect" style="display:flex;gap:18px;font-size:26px;cursor:pointer;user-select:none;padding:5px 0;">
+              <span class="mood-option" data-mood="🤩" title="极度高兴">🤩</span>
+              <span class="mood-option" data-mood="😊" title="开心">😊</span>
+              <span class="mood-option" data-mood="😐" title="平淡">😐</span>
+              <span class="mood-option" data-mood="😔" title="低落">😔</span>
+              <span class="mood-option" data-mood="😭" title="伤心">😭</span>
+            </div>
+          </div>
           <div class="form-row">
             <label>标签 <button type="button" id="manageTagsBtn" style="margin-left:8px;padding:4px 10px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:10px;color:var(--text-secondary);font-size:11px;cursor:pointer;">管理</button></label>
             <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
@@ -455,6 +514,10 @@
           <input type="date" id="anniversaryDate">
         </div>
         <div class="form-row">
+          <label for="anniversaryCelebrationText">专属庆祝语（选填）</label>
+          <input type="text" id="anniversaryCelebrationText" placeholder="全屏庆祝时的文案，留空则使用默认">
+        </div>
+        <div class="form-row">
           <label><input type="checkbox" id="anniversaryRepeating"> 每年重复</label>
         </div>
         <div class="form-row">
@@ -482,6 +545,22 @@
       </div>
     </div>
 
+    <!-- 纪念日详情弹窗 -->
+    <div class="modal hidden" id="anniversaryDetailModal">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content" style="max-width:360px;text-align:center;position:relative;">
+        <button class="modal-close" id="closeAnniversaryDetailModal" style="position:absolute;right:15px;top:15px;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+        <div id="anniversaryDetailContent" style="margin-top:10px;"></div>
+        <div id="anniversaryDetailActions" style="margin-top:25px;display:flex;gap:10px;justify-content:center;"></div>
+      </div>
+    </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
@@ -492,6 +571,7 @@
   <script src="js/calendar.js"></script>
   <script src="js/anniversary.js"></script>
   <script src="js/sensing.js"></script>
+  <script src="js/backup.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

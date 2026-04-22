@@ -21,6 +21,11 @@ function initAnniversary() {
     }
   }
 
+  var detailCloseBtn = document.getElementById('closeAnniversaryDetailModal');
+  if (detailCloseBtn) {
+    detailCloseBtn.addEventListener('click', function() { document.getElementById('anniversaryDetailModal').classList.add('hidden'); });
+  }
+
   // 图标选择事件
   var iconSelect = document.getElementById('anniversaryIconSelect');
   if (iconSelect) {
@@ -68,6 +73,7 @@ function openAnniversaryModal(anniversary) {
   var titleInput = document.getElementById('anniversaryTitle');
   var dateInput = document.getElementById('anniversaryDate');
   var repeatingInput = document.getElementById('anniversaryRepeating');
+  var celebrationTextInput = document.getElementById('anniversaryCelebrationText');
   var deleteBtn = document.getElementById('deleteAnniversaryBtn');
   
   // 重置图标选中状态
@@ -86,6 +92,7 @@ function openAnniversaryModal(anniversary) {
     titleInput.value = anniversary.title;
     dateInput.value = anniversary.date;
     repeatingInput.checked = anniversary.isRepeating;
+    celebrationTextInput.value = anniversary.celebrationText || '';
     deleteBtn.classList.remove('hidden');
     
     var targetIcon = anniversary.icon || '💝';
@@ -127,6 +134,7 @@ function openAnniversaryModal(anniversary) {
     var today = new Date();
     dateInput.value = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
     repeatingInput.checked = false;
+    celebrationTextInput.value = '';
     deleteBtn.classList.add('hidden');
     iconOptions[0].classList.add('selected'); // 默认选中第一个
     loadAnniversaryShareUsers();
@@ -190,19 +198,148 @@ function calculateDays(dateStr, isRepeating) {
   var diffTarget = Math.round((target - today) / (1000 * 60 * 60 * 24));
 
   var type, displayDays;
-  
+
+  // 今天是纪念日（无论重不重复）
   if (diffTarget === 0) {
-    type = 'today'; // 优先判断今天是不是纪念日（无论重不重复）
+    type = 'today';
     displayDays = 0;
-  } else if (diffOriginal > 0) {
-    type = 'countup'; // 已经过去，永远显示正数（例如相识多少天）
+  } else if (diffOriginal > 0 && !isRepeating) {
+    // 非重复纪念日已过 → 显示正数（相识多少天）
+    type = 'countup';
     displayDays = diffOriginal;
+  } else if (diffTarget > 0 && isRepeating) {
+    // 重复纪念日已过（但还没到明年）→ 这种情况不应该发生，但为了安全显示倒计时
+    type = 'countdown';
+    displayDays = diffTarget;
   } else {
-    type = 'countdown'; // 还没到，显示倒数
+    // 还没到纪念日 → 显示倒数
+    type = 'countdown';
     displayDays = Math.abs(diffOriginal);
   }
   
   return { type: type, days: displayDays, targetDate: target, originalDate: original, isAnniversaryToday: diffTarget === 0 };
+}
+
+// 显示纪念日详情
+async function showAnniversaryDetail(anniversaryId) {
+  try {
+    var doc = await db.collection('anniversaries').doc(anniversaryId).get();
+    if (!doc.exists) return;
+    var data = doc.data();
+
+    var modal = document.getElementById('anniversaryDetailModal');
+    var content = document.getElementById('anniversaryDetailContent');
+    var actions = document.getElementById('anniversaryDetailActions');
+
+    var result = calculateDays(data.date, data.isRepeating);
+    var today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    var daysDisplay = result.days;
+    var daysText = '';
+    var ymdText = '';
+
+    if (result.type === 'countdown') {
+      daysText = '还有 ' + result.days + ' 天';
+      ymdText = getExactYMD(today, result.targetDate);
+    } else if (result.type === 'countup') {
+      daysText = '已经 ' + result.days + ' 天';
+      ymdText = getExactYMD(result.originalDate, today);
+    } else {
+      daysDisplay = '🎉';
+      daysText = '就是今天';
+      ymdText = '0天';
+    }
+
+    var userIds = [data.userId];
+    if (data.coAuthors) {
+      data.coAuthors.forEach(function(uid) { if (userIds.indexOf(uid) === -1) userIds.push(uid); });
+    }
+    var userInfos = await getBatchUserInfo(userIds);
+    var userMap = {};
+    userInfos.forEach(function(u) { userMap[u.userId] = u; });
+
+    var iconDisplay = data.icon || '💝';
+    var visibilityText = {
+      'private': '仅自己可见',
+      'shared': '仅链接对象可见',
+      'public': '所有人可见',
+      'co-authored': '共同纪念日'
+    }[data.visibility || 'public'] || '';
+
+    var isPendingCoAuthor = data.coAuthors && data.coAuthors.indexOf(currentUser.uid) !== -1 && data.userId !== currentUser.uid && (!data.acceptedCoAuthors || data.acceptedCoAuthors.indexOf(currentUser.uid) === -1);
+    var canEdit = (data.userId === currentUser.uid || (data.coAuthors && data.coAuthors.indexOf(currentUser.uid) !== -1)) && !isPendingCoAuthor;
+
+    var daysFontSize = result.type === 'today' ? '4rem' : '3.5rem';
+
+    var avatarHtml = '';
+    var isCoAuthored = data.visibility === 'co-authored' && data.coAuthors && data.coAuthors.length > 0;
+    if (isCoAuthored) {
+      var avatars = [];
+      var creatorData = userMap[data.userId];
+      if (creatorData) avatars.push(renderUserAvatar(creatorData, 28, '4px', creatorData.displayName));
+      var accepted = data.acceptedCoAuthors || [];
+      data.coAuthors.forEach(function(uid) {
+        if (uid !== data.userId && accepted.indexOf(uid) !== -1) {
+          var coData = userMap[uid];
+          if (coData) avatars.push(renderUserAvatar(coData, 28, '4px', coData.displayName));
+        }
+      });
+      avatarHtml = '<div style="display:flex;justify-content:center;margin-top:15px;margin-bottom:5px;">' + avatars.join('') + '</div>';
+    } else {
+      var creatorData = userMap[data.userId];
+      if (creatorData) {
+        avatarHtml = '<div style="display:flex;justify-content:center;margin-top:15px;margin-bottom:5px;">' + renderUserAvatar(creatorData, 28, '0', creatorData.displayName) + '</div>';
+      }
+    }
+    
+    window.toggleAnniversaryDetailYMD = function(el) {
+      if (result.type === 'today') return;
+      var isYMD = el.getAttribute('data-show-ymd') === 'true';
+      if (isYMD) {
+        el.innerText = daysDisplay;
+        el.style.fontSize = daysFontSize;
+        el.setAttribute('data-show-ymd', 'false');
+      } else {
+        el.innerText = ymdText;
+        el.style.fontSize = '1.8rem';
+        el.setAttribute('data-show-ymd', 'true');
+      }
+    };
+
+    content.innerHTML = '<div style="font-size:12px;color:var(--text-muted);margin-bottom:15px;display:inline-block;background:var(--bg-tertiary);padding:4px 10px;border-radius:12px;">' + visibilityText + '</div>' +
+      '<div class="days-count" style="font-size:' + daysFontSize + ';font-weight:bold;color:var(--accent);line-height:1;margin-bottom:10px;cursor:pointer;text-shadow:' + (result.type === 'today' ? '0 0 15px var(--accent-light)' : 'none') + ';" data-show-ymd="false" onclick="toggleAnniversaryDetailYMD(this)">' + daysDisplay + '</div>' +
+      '<div style="font-size:14px;color:var(--text-muted);margin-bottom:20px;">' + daysText + '</div>' +
+      '<div style="font-size:20px;font-weight:500;color:var(--text-primary);margin-bottom:8px;">' + iconDisplay + ' ' + escapeHtml(data.title) + '</div>' +
+      '<div style="font-size:14px;color:var(--text-muted);">' + data.date + (data.isRepeating ? ' 🔄' : '') + '</div>' +
+      avatarHtml;
+
+    actions.innerHTML = '';
+    if (canEdit) {
+      actions.innerHTML = '<button id="detailEditAnnBtn" style="padding:10px 30px;background:var(--accent-light);border:1px solid var(--accent);border-radius:8px;color:var(--accent);font-size:14px;cursor:pointer;transition:all 0.2s;">编辑</button>';
+    }
+
+    modal.classList.remove('hidden');
+
+    if (canEdit) {
+      document.getElementById('detailEditAnnBtn').onclick = function() {
+        modal.classList.add('hidden');
+        openAnniversaryModal({
+          id: doc.id,
+          title: data.title,
+          date: data.date,
+          isRepeating: data.isRepeating,
+          icon: data.icon,
+          visibility: data.visibility || 'public',
+        celebrationText: data.celebrationText || '',
+          sharedWith: data.sharedWith || [],
+          coAuthors: data.coAuthors || []
+        });
+      };
+    }
+  } catch (e) {
+    console.error('加载纪念日详情失败:', e);
+  }
 }
 
 // 获取所有纪念日（用于日历）
@@ -216,7 +353,7 @@ async function getAllAnniversariesForCalendar() {
     var anniversaries = [];
     snapshot.forEach(function(doc) {
       var data = doc.data();
-      if (isDiaryVisible(data, currentUser.uid, linkedIds, currentDiaryFilter)) {
+      if (isDiaryVisible(data, currentUser.uid, linkedIds, activeFilters, { checkAcceptance: true })) {
         anniversaries.push({
           id: doc.id,
           title: data.title,
@@ -254,19 +391,34 @@ async function loadAnniversaries() {
 
     listEl.innerHTML = '';
 
-    var hasAnniversary = false;
+    var validAnniversaries = [];
+    var userIds = [];
+
     snapshot.forEach(function(doc) {
       var data = doc.data();
-      if (isDiaryVisible(data, currentUser.uid, linkedIds, currentDiaryFilter)) {
-        hasAnniversary = true;
-        var anniversary = { id: doc.id, data: data };
-        renderAnniversaryCard(anniversary);
+      if (isDiaryVisible(data, currentUser.uid, linkedIds, activeFilters)) {
+        validAnniversaries.push({ id: doc.id, data: data });
+        if (userIds.indexOf(data.userId) === -1) userIds.push(data.userId);
+        if (data.coAuthors) {
+          data.coAuthors.forEach(function(uid) { if (userIds.indexOf(uid) === -1) userIds.push(uid); });
+        }
       }
     });
 
-    if (!hasAnniversary) {
+    if (validAnniversaries.length === 0) {
       listEl.innerHTML = '<div class="anniversary-empty">还没有纪念日，点击右上角+添加一个吧</div>';
+      return;
     }
+
+    var userMap = {};
+    if (userIds.length > 0) {
+      var userInfos = await getBatchUserInfo(userIds);
+      userInfos.forEach(function(u) { userMap[u.userId] = u; });
+    }
+
+    validAnniversaries.forEach(function(ann) {
+      renderAnniversaryCard(ann, userMap);
+    });
   } catch (e) {
     console.error('加载纪念日失败:', e);
     listEl.innerHTML = '<div class="anniversary-empty">加载失败</div>';
@@ -274,7 +426,7 @@ async function loadAnniversaries() {
 }
 
 // 渲染纪念日卡片
-function renderAnniversaryCard(anniversary) {
+function renderAnniversaryCard(anniversary, userMap) {
   var listEl = document.getElementById('anniversaryList');
   var data = anniversary.data;
 
@@ -314,16 +466,50 @@ function renderAnniversaryCard(anniversary) {
     'co-authored': '共同纪念日'
   }[data.visibility || 'public'] || '';
   
-  var canEdit = data.userId === currentUser.uid || (data.coAuthors && data.coAuthors.indexOf(currentUser.uid) !== -1);
+  var isPendingCoAuthor = data.coAuthors && data.coAuthors.indexOf(currentUser.uid) !== -1 && data.userId !== currentUser.uid && (!data.acceptedCoAuthors || data.acceptedCoAuthors.indexOf(currentUser.uid) === -1);
+
+  var avatarHtml = '';
+  var isCoAuthored = data.visibility === 'co-authored' && data.coAuthors && data.coAuthors.length > 0;
+  if (userMap) {
+    if (isCoAuthored) {
+      var avatars = [];
+      var creatorData = userMap[data.userId];
+      if (creatorData) avatars.push(renderUserAvatar(creatorData, 22, '2px', creatorData.displayName));
+      var accepted = data.acceptedCoAuthors || [];
+      data.coAuthors.forEach(function(uid) {
+        if (uid !== data.userId && accepted.indexOf(uid) !== -1) {
+          var coData = userMap[uid];
+          if (coData) avatars.push(renderUserAvatar(coData, 22, '2px', coData.displayName));
+        }
+      });
+      avatarHtml = '<div style="display:flex;justify-content:center;margin-top:12px;gap:2px;">' + avatars.join('') + '</div>';
+    } else {
+      var creatorData = userMap[data.userId];
+      if (creatorData) avatarHtml = '<div style="display:flex;justify-content:center;margin-top:12px;">' + renderUserAvatar(creatorData, 22, '0', creatorData.displayName) + '</div>';
+    }
+  }
+
+  var pendingOverlay = '';
+  if (isPendingCoAuthor) {
+    pendingOverlay = '<div style="position:absolute;inset:0;background:var(--bg-secondary);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;border:1px solid var(--accent);">' +
+      '<div style="font-size:14px;margin-bottom:15px;color:var(--text-primary);">邀请你共建此纪念日</div>' +
+      '<div style="display:flex;gap:10px;">' +
+        '<button class="reject-co-btn" style="padding:6px 16px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:15px;color:var(--text-secondary);font-size:12px;cursor:pointer;">拒绝</button>' +
+        '<button class="accept-co-btn" style="padding:6px 16px;background:var(--accent-light);border:1px solid var(--accent);border-radius:15px;color:var(--accent);font-size:12px;cursor:pointer;">接受</button>' +
+      '</div></div>';
+  }
+
+  var canEdit = (data.userId === currentUser.uid || (data.coAuthors && data.coAuthors.indexOf(currentUser.uid) !== -1)) && !isPendingCoAuthor;
 
   var actionsHtml = canEdit ? '<div class="card-actions"><button class="edit-btn" data-id="' + anniversary.id + '">编辑</button></div>' : '';
 
-  card.innerHTML = actionsHtml +
+  card.innerHTML = pendingOverlay + actionsHtml +
     '<div style="position:absolute;top:12px;left:12px;font-size:11px;color:var(--text-muted);background:var(--bg-tertiary);padding:3px 8px;border-radius:10px;">' + visibilityText + '</div>' +
     '<div class="days-count" title="点击切换显示格式">' + daysDisplay + '</div>' +
     '<div class="days-text">' + daysText + '</div>' +
     '<div class="anniversary-title">' + iconDisplay + ' ' + escapeHtml(data.title) + '</div>' +
-    '<div class="anniversary-date">' + data.date + (data.isRepeating ? ' 🔄' : '') + '</div>';
+    '<div class="anniversary-date">' + data.date + (data.isRepeating ? ' 🔄' : '') + '</div>' + 
+    avatarHtml;
 
   listEl.appendChild(card);
   
@@ -338,6 +524,20 @@ function renderAnniversaryCard(anniversary) {
     });
   }
 
+  if (isPendingCoAuthor) {
+    card.querySelector('.accept-co-btn').addEventListener('click', async function(e) {
+      e.stopPropagation();
+      await db.collection('anniversaries').doc(anniversary.id).update({ acceptedCoAuthors: firebase.firestore.FieldValue.arrayUnion(currentUser.uid) });
+      loadAnniversaries();
+      if (typeof refreshCalendar === 'function') refreshCalendar();
+    });
+    card.querySelector('.reject-co-btn').addEventListener('click', async function(e) {
+      e.stopPropagation();
+      await db.collection('anniversaries').doc(anniversary.id).update({ coAuthors: firebase.firestore.FieldValue.arrayRemove(currentUser.uid), acceptedCoAuthors: firebase.firestore.FieldValue.arrayRemove(currentUser.uid) });
+      loadAnniversaries();
+    });
+  }
+
   // 编辑按钮事件
   if (canEdit) {
     card.querySelector('.edit-btn').addEventListener('click', function() {
@@ -348,6 +548,7 @@ function renderAnniversaryCard(anniversary) {
         isRepeating: data.isRepeating,
         icon: data.icon,
         visibility: data.visibility || 'public',
+        celebrationText: data.celebrationText || '',
         sharedWith: data.sharedWith || [],
         coAuthors: data.coAuthors || []
       });
@@ -361,6 +562,7 @@ async function saveAnniversary() {
   var titleInput = document.getElementById('anniversaryTitle');
   var dateInput = document.getElementById('anniversaryDate');
   var repeatingInput = document.getElementById('anniversaryRepeating');
+  var celebrationTextInput = document.getElementById('anniversaryCelebrationText');
 
   var title = titleInput.value.trim();
   var date = dateInput.value;
@@ -401,14 +603,20 @@ async function saveAnniversary() {
     date: date,
     icon: icon,
     isRepeating: isRepeating,
+    celebrationText: celebrationTextInput.value.trim(),
     visibility: visibility,
     sharedWith: visibility === 'shared' ? sharedWith : []
   };
-  
+
   if (coAuthors.length > 0) {
     data.coAuthors = coAuthors;
+    if (idInput.value) {
+      data.acceptedCoAuthors = firebase.firestore.FieldValue.arrayUnion(currentUser.uid);
+    } else {
+      data.acceptedCoAuthors = [currentUser.uid];
+    }
   } else {
-    data.coAuthors = firebase.firestore.FieldValue.delete(); // 如果取消勾选，则清除该字段
+    // 非共建纪念日，不设置这两个字段即可
   }
 
   try {
@@ -493,4 +701,111 @@ async function loadAnniversaryCoAuthors() {
     });
     coAuthorsList.appendChild(item);
   });
+}
+
+// 全局标记是否已经庆祝过，避免每次刷新都喷发
+window.hasCelebrated = false;
+
+async function checkAndTriggerCelebration() {
+  if (window.hasCelebrated || !currentUser) return;
+
+  try {
+    var snapshot = await db.collection('anniversaries').get();
+    var linkedIds = await getLinkedUserIds();
+    var todayAnniversaries = [];
+
+    snapshot.forEach(function(doc) {
+      var data = doc.data();
+      if (isDiaryVisible(data, currentUser.uid, linkedIds, activeFilters, { checkAcceptance: true })) {
+        var result = calculateDays(data.date, data.isRepeating);
+        if (result.type === 'today') {
+          var text = data.celebrationText ? data.celebrationText : ('🎉 ' + data.title + ' 快乐！ 🎉');
+          todayAnniversaries.push(text);
+        }
+      }
+    });
+
+    if (todayAnniversaries.length > 0) {
+      window.hasCelebrated = true;
+      triggerCelebrationEffect(todayAnniversaries);
+    }
+  } catch (e) {
+    console.error('检查今日纪念日失败:', e);
+  }
+}
+
+// 华丽的喷射彩带特效
+function triggerCelebrationEffect(texts) {
+  var canvas = document.getElementById('celebrationCanvas');
+  if (!canvas) return;
+  canvas.style.display = 'block';
+  var ctx = canvas.getContext('2d');
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+
+  var particles = [];
+  var colors = ['#fce18a', '#ff726d', '#b48def', '#f4306d', '#64b4ff', '#7dd99a'];
+  var originX = canvas.width / 2;
+  var originY = canvas.height;
+
+  for (var i = 0; i < 150; i++) {
+    particles.push({
+      x: originX, y: originY,
+      vx: (Math.random() - 0.5) * 25,     // 随机左右抛射
+      vy: (Math.random() - 1) * 25 - 10,  // 向上抛射
+      size: Math.random() * 10 + 6,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      rotation: Math.random() * 360,
+      rotationSpeed: (Math.random() - 0.5) * 15,
+      life: 1.5 // 寿命
+    });
+  }
+
+  function animate() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    var active = false;
+
+    if (texts && texts.length > 0) {
+      ctx.save();
+      var fontSize = window.innerWidth < 600 ? 24 : 40;
+      ctx.font = 'bold ' + fontSize + 'px Noto Serif SC, sans-serif';
+      ctx.fillStyle = 'rgba(255, 107, 107, ' + Math.min(1, particles[0].life) + ')';
+      ctx.textAlign = 'center';
+      ctx.shadowColor = 'rgba(255,255,255,0.8)';
+      ctx.shadowBlur = 15;
+      
+      var lineHeight = fontSize + 16;
+      var startY = canvas.height / 3 - ((texts.length - 1) * lineHeight) / 2;
+      for (var j = 0; j < texts.length; j++) {
+        ctx.fillText(texts[j], canvas.width / 2, startY + j * lineHeight);
+      }
+      ctx.restore();
+    }
+
+    for (var i = 0; i < particles.length; i++) {
+      var p = particles[i];
+      if (p.life <= 0) continue;
+      active = true;
+      p.vy += 0.35; // 重力
+      p.x += p.vx;
+      p.y += p.vy;
+      p.rotation += p.rotationSpeed;
+      p.life -= 0.006;
+
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rotation * Math.PI / 180);
+      ctx.fillStyle = p.color;
+      ctx.globalAlpha = Math.max(0, p.life);
+      ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 1.5);
+      ctx.restore();
+    }
+
+    if (active) {
+      requestAnimationFrame(animate);
+    } else {
+      canvas.style.display = 'none';
+    }
+  }
+  animate();
 }

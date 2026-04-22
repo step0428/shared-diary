@@ -3,6 +3,8 @@ document.addEventListener('DOMContentLoaded', function() {
   initApp();
 });
 
+let activeFilters = ['mine']; // 默认显示"我的记录"
+
 function initApp() {
   setupAuth();
   setupModal();
@@ -18,11 +20,60 @@ function initApp() {
   initAnniversary();
   initParticles();
   initSensing();
+  setupPullToRefresh();
 
   // 隐藏加载动画
   setTimeout(function() {
     document.getElementById('loading').classList.add('hidden');
   }, 800);
+}
+
+// 设置移动端下拉刷新 (Pull-to-Refresh)
+function setupPullToRefresh() {
+  var diaryView = document.getElementById('diaryView');
+  var ptrContainer = document.createElement('div');
+  ptrContainer.id = 'ptrContainer';
+  ptrContainer.innerHTML = '↓ 下拉刷新';
+  ptrContainer.style.cssText = 'height:0px; overflow:hidden; transition:height 0.3s; display:flex; justify-content:center; align-items:center; color:var(--text-secondary); font-size:13px;';
+  diaryView.insertBefore(ptrContainer, diaryView.firstChild);
+
+  var startY = 0, currentY = 0, isPulling = false;
+
+  diaryView.addEventListener('touchstart', function(e) {
+    if (diaryView.scrollTop <= 0) {
+      startY = e.touches[0].clientY;
+      isPulling = true;
+      ptrContainer.style.transition = 'none';
+    }
+  }, {passive: true});
+
+  diaryView.addEventListener('touchmove', function(e) {
+    if (!isPulling) return;
+    currentY = e.touches[0].clientY;
+    var diff = currentY - startY;
+    if (diff > 0 && diaryView.scrollTop <= 0) {
+      if(e.cancelable) e.preventDefault(); // 阻止浏览器原生下拉
+      ptrContainer.style.height = Math.min(diff * 0.4, 60) + 'px';
+      ptrContainer.innerHTML = diff > 60 ? '↑ 松开刷新' : '↓ 下拉刷新';
+    } else {
+      isPulling = false;
+    }
+  }, {passive: false});
+
+  diaryView.addEventListener('touchend', function(e) {
+    if (!isPulling) return;
+    isPulling = false;
+    ptrContainer.style.transition = 'height 0.3s';
+    var diff = currentY - startY;
+    if (diff > 60) {
+      ptrContainer.style.height = '40px';
+      ptrContainer.innerHTML = '⏳ 刷新中...';
+      refreshActiveView();
+      setTimeout(function() { ptrContainer.style.height = '0px'; }, 1000);
+    } else {
+      ptrContainer.style.height = '0px';
+    }
+  });
 }
 
 // 设置多选删除
@@ -73,7 +124,7 @@ function setupMultiSelectDelete() {
 
     var ids = [];
     checked.forEach(function(cb) {
-      var item = cb.closest('.diary-item');
+      var item = cb.closest('[data-id]');
       if (item && item.dataset.id) {
         ids.push(item.dataset.id);
       }
@@ -197,7 +248,7 @@ function renderFriendSidebar() {
   var items = document.querySelectorAll('.friend-item[data-filter]');
   items.forEach(function(item) {
     item.classList.remove('active');
-    if (item.dataset.filter === currentDiaryFilter) {
+    if (activeFilters.indexOf(item.dataset.filter) !== -1) {
       item.classList.add('active');
     }
   });
@@ -244,17 +295,20 @@ function renderFriendSidebar() {
       item.style.alignItems = 'center';
       item.innerHTML = avatarHtml + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(otherUser.displayName) + '</span>';
 
-      if (currentDiaryFilter === otherUser.userId) {
+      if (activeFilters.indexOf(otherUser.userId) !== -1) {
         item.classList.add('active');
       }
 
       item.addEventListener('click', function(e) {
         var clickedItem = e.currentTarget;
-        currentDiaryFilter = clickedItem.dataset.filter;
-        document.querySelectorAll('.friend-item').forEach(function(el) {
-          el.classList.remove('active');
-        });
-        clickedItem.classList.add('active');
+        var filterVal = clickedItem.dataset.filter;
+        var idx = activeFilters.indexOf(filterVal);
+        if (idx !== -1) {
+          activeFilters.splice(idx, 1);
+        } else {
+          activeFilters.push(filterVal);
+        }
+        clickedItem.classList.toggle('active', activeFilters.indexOf(filterVal) !== -1);
         refreshActiveView();
       });
 
@@ -268,26 +322,20 @@ function renderFriendSidebar() {
 
 // 设置侧边栏筛选
 function setupSidebarFilter() {
-  var allDiaryItem = document.querySelector('.friend-item[data-filter="all"]');
   var myDiaryItem = document.querySelector('.friend-item[data-filter="mine"]');
 
-  allDiaryItem.addEventListener('click', function() {
-    currentDiaryFilter = 'all';
-    document.querySelectorAll('.friend-item').forEach(function(el) {
-      el.classList.remove('active');
+  if (myDiaryItem) {
+    myDiaryItem.addEventListener('click', function() {
+      var idx = activeFilters.indexOf('mine');
+      if (idx !== -1) {
+        activeFilters.splice(idx, 1);
+      } else {
+        activeFilters.push('mine');
+      }
+      myDiaryItem.classList.toggle('active', activeFilters.indexOf('mine') !== -1);
+      refreshActiveView();
     });
-    allDiaryItem.classList.add('active');
-    refreshActiveView();
-  });
-
-  myDiaryItem.addEventListener('click', function() {
-    currentDiaryFilter = 'mine';
-    document.querySelectorAll('.friend-item').forEach(function(el) {
-      el.classList.remove('active');
-    });
-    myDiaryItem.classList.add('active');
-    refreshActiveView();
-  });
+  }
 }
 
 // 设置侧边栏展开/收起
@@ -303,6 +351,12 @@ function setupToggleSidebar() {
 // 设置模态框
 function setupModal() {
   document.getElementById('closeDiaryModal').addEventListener('click', function() {
+    // 清理音频
+    var audio = document.getElementById('diaryAudioPlayer');
+    if (audio && audio._audioCtx) {
+      try { audio._audioCtx.close(); } catch(e) {}
+      audio._audioCtx = null;
+    }
     document.getElementById('diaryModal').classList.add('hidden');
   });
 
@@ -327,6 +381,14 @@ function setupModal() {
   document.querySelectorAll('.modal-backdrop').forEach(function(backdrop) {
     backdrop.addEventListener('click', function() {
       var modal = backdrop.closest('.modal');
+      // 如果关掉的是详情弹窗，清理音频
+      if (modal.id === 'diaryModal') {
+        var audio = document.getElementById('diaryAudioPlayer');
+        if (audio && audio._audioCtx) {
+          try { audio._audioCtx.close(); } catch(e) {}
+          audio._audioCtx = null;
+        }
+      }
       // 如果是写日记弹窗且有内容，自动保存草稿
       if (modal.id === 'writeModal' && hasDiaryContent()) {
         saveDiaryDraft();
@@ -409,6 +471,21 @@ function setupWriteDiary() {
     renderImagePreview();
   });
 
+  // 心情选择
+  var moodSelect = document.getElementById('moodSelect');
+  if (moodSelect) {
+    moodSelect.addEventListener('click', function(e) {
+      if (e.target.classList.contains('mood-option')) {
+        if (e.target.classList.contains('selected')) {
+          e.target.classList.remove('selected');
+        } else {
+          document.querySelectorAll('.mood-option').forEach(function(el) { el.classList.remove('selected'); });
+          e.target.classList.add('selected');
+        }
+      }
+    });
+  }
+
   // 音频上传
   document.getElementById('diaryAudio').addEventListener('change', function(e) {
     var file = e.target.files[0];
@@ -422,6 +499,8 @@ function setupWriteDiary() {
   // 录音功能
   var recordBtn = document.getElementById('recordAudioBtn');
   var isRecording = false;
+  window.recordingAudioCtx = null;
+  window.recordingAnimationId = null;
 
   recordBtn.addEventListener('click', async function() {
     if (isRecording) {
@@ -432,6 +511,11 @@ function setupWriteDiary() {
       isRecording = false;
       recordBtn.textContent = '🎤 录音';
       recordBtn.style.background = '';
+      cancelAnimationFrame(window.recordingAnimationId);
+      if (window.recordingAudioCtx) {
+        try { window.recordingAudioCtx.close(); } catch(e) {}
+        window.recordingAudioCtx = null;
+      }
       return;
     }
 
@@ -439,6 +523,42 @@ function setupWriteDiary() {
       var stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaRecorder = new MediaRecorder(stream);
       audioChunks = [];
+
+      // 初始化实时录音波形
+      document.getElementById('audioPreview').innerHTML = '<div style="display:flex;flex-direction:column;gap:10px;padding:15px;background:var(--bg-tertiary);border-radius:12px;align-items:center;">' +
+        '<div style="font-size:13px;color:var(--accent);margin-bottom:5px;animation:pulse 1.5s infinite;">正在倾听你的声音...</div>' +
+        '<canvas id="recordingVisualizer" width="300" height="60" style="width:100%;max-width:400px;height:60px;border-radius:8px;background:rgba(0,0,0,0.05);"></canvas>' +
+        '</div>';
+      document.getElementById('recordingStatus').style.display = 'none';
+
+      window.recordingAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      var recordingAnalyser = window.recordingAudioCtx.createAnalyser();
+      var source = window.recordingAudioCtx.createMediaStreamSource(stream);
+      source.connect(recordingAnalyser);
+      recordingAnalyser.fftSize = 128;
+      var bufferLength = recordingAnalyser.frequencyBinCount;
+      var recordingDataArray = new Uint8Array(bufferLength);
+
+      var canvas = document.getElementById('recordingVisualizer');
+      var ctx = canvas.getContext('2d');
+      var barWidth = (canvas.width / 64) * 1.5;
+      var accentColor = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#64b4ff';
+
+      function drawRecording() {
+        window.recordingAnimationId = requestAnimationFrame(drawRecording);
+        recordingAnalyser.getByteFrequencyData(recordingDataArray);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        var currentX = 0;
+        for (var i = 0; i < bufferLength; i++) {
+          var barHeight = (recordingDataArray[i] / 255) * canvas.height * 0.8;
+          if (barHeight < 2) barHeight = 2;
+          ctx.fillStyle = accentColor;
+          ctx.globalAlpha = 0.7 + (barHeight / canvas.height) * 0.3;
+          ctx.fillRect(currentX, canvas.height / 2 - barHeight / 2, barWidth, barHeight);
+          currentX += barWidth + 2;
+        }
+      }
+      drawRecording();
 
       mediaRecorder.ondataavailable = function(e) {
         audioChunks.push(e.data);
@@ -449,17 +569,12 @@ function setupWriteDiary() {
         selectedAudioFile = new File([audioBlob], 'recording.webm', { type: 'audio/webm' });
         renderAudioPreview();
         stream.getTracks().forEach(function(track) { track.stop(); });
-        document.getElementById('recordingStatus').textContent = '';
-        document.getElementById('recordingStatus').style.display = 'none';
       };
 
       mediaRecorder.start();
       isRecording = true;
       recordBtn.textContent = '⏹ 停止';
       recordBtn.style.background = 'var(--accent-light)';
-
-      document.getElementById('recordingStatus').textContent = '录音中...';
-      document.getElementById('recordingStatus').style.display = 'block';
     } catch (err) {
       console.error('录音失败:', err);
       alert('无法访问麦克风，请检查权限设置');
@@ -473,7 +588,18 @@ function setupWriteDiary() {
       return;
     }
     var url = URL.createObjectURL(selectedAudioFile);
-    preview.innerHTML = '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg-tertiary);border-radius:8px;"><audio src="' + url + '" controls style="height:32px;"></audio><button type="button" onclick="removeAudio()" style="padding:4px 12px;background:rgba(255,100,100,0.2);border:1px solid rgba(255,100,100,0.4);border-radius:6px;color:#ff6b6b;cursor:pointer;">删除</button></div>';
+    preview.innerHTML = '<div style="display:flex;flex-direction:column;gap:10px;padding:15px;background:var(--bg-tertiary);border-radius:12px;align-items:center;">' +
+      '<canvas id="previewAudioVisualizer" width="300" height="60" style="width:100%;max-width:400px;height:60px;border-radius:8px;background:rgba(0,0,0,0.05);"></canvas>' +
+      '<div style="display:flex;align-items:center;gap:10px;width:100%;">' +
+      '<audio id="previewAudioPlayer" src="' + url + '" controls style="flex:1;height:32px;outline:none;"></audio>' +
+      '<button type="button" onclick="removeAudio()" style="padding:6px 16px;background:rgba(255,100,100,0.15);border:1px solid rgba(255,100,100,0.3);border-radius:8px;color:#ff6b6b;cursor:pointer;white-space:nowrap;font-size:13px;">删除</button>' +
+      '</div></div>';
+      
+    setTimeout(function() {
+      if (typeof setupAudioVisualizer === 'function') {
+        setupAudioVisualizer('previewAudioPlayer', 'previewAudioVisualizer');
+      }
+    }, 50);
   }
 
   window.removeAudio = function() {
@@ -528,29 +654,74 @@ function setupWriteDiary() {
 function renderImagePreview() {
   var preview = document.getElementById('imagePreview');
   preview.innerHTML = '';
+  var draggingNode = null; // 记录当前正在拖拽的节点
+
   for (var i = 0; i < selectedImageFiles.length; i++) {
-    (function(index, file) {
-      var reader = new FileReader();
-      reader.onload = function(e) {
-        var container = document.createElement('div');
-        container.style = 'position:relative;display:inline-block;';
-        var img = document.createElement('img');
-        img.src = e.target.result;
-        img.style = 'width:80px;height:80px;object-fit:cover;border-radius:8px;';
-        var removeBtn = document.createElement('button');
-        removeBtn.textContent = '×';
-        removeBtn.style = 'position:absolute;top:-8px;right:-8px;width:22px;height:22px;border-radius:50%;background:#ff6b6b;border:none;color:#fff;cursor:pointer;font-size:14px;line-height:1;';
-        removeBtn.dataset.index = index;
-        removeBtn.addEventListener('click', function() {
-          selectedImageFiles.splice(index, 1);
-          renderImagePreview();
+    (function(file) {
+      var container = document.createElement('div');
+      container.style = 'position:relative;display:inline-block;cursor:grab;transition:transform 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);';
+      container.draggable = true;
+      container.fileRef = file; // 绑定真实文件引用
+      
+      // 相册拖拽排序逻辑 (实时 DOM 交换，实现 iOS 般自动避让)
+      container.addEventListener('dragstart', function(ev) {
+        draggingNode = container;
+        ev.dataTransfer.effectAllowed = 'move';
+        ev.dataTransfer.setData('text/plain', ''); // 兼容火狐
+        setTimeout(function() { container.style.opacity = '0.2'; }, 0);
+      });
+      
+      container.addEventListener('dragover', function(ev) {
+        ev.preventDefault();
+        ev.dataTransfer.dropEffect = 'move';
+        if (draggingNode && draggingNode !== container) {
+          var children = Array.from(preview.children);
+          var draggingIdx = children.indexOf(draggingNode);
+          var hoverIdx = children.indexOf(container);
+          // 根据前后位置决定插入方向，自动把挡路的图片挤开
+          if (hoverIdx > draggingIdx) {
+            preview.insertBefore(draggingNode, container.nextSibling);
+          } else {
+            preview.insertBefore(draggingNode, container);
+          }
+        }
+        return false;
+      });
+      
+      container.addEventListener('dragend', function() {
+        container.style.opacity = '1';
+        draggingNode = null;
+        
+        // 松手时，根据最终被挤乱重排的真实 DOM 顺序，同步保存到我们的底层数据数组
+        var newFiles = [];
+        Array.from(preview.children).forEach(function(child) {
+          if (child.fileRef) newFiles.push(child.fileRef);
         });
-        container.appendChild(img);
-        container.appendChild(removeBtn);
-        preview.appendChild(container);
-      };
-      reader.readAsDataURL(file);
-    })(i, selectedImageFiles[i]);
+        selectedImageFiles = newFiles;
+        renderImagePreview(); // 刷新状态以确保一切同步
+      });
+
+      var img = document.createElement('img');
+      // 使用同步方式替代 FileReader，避免因为图片大小不同导致加载速度不同引起的排列错乱
+      img.src = URL.createObjectURL(file);
+      img.style = 'width:80px;height:80px;object-fit:cover;border-radius:8px;pointer-events:none;';
+      
+      var removeBtn = document.createElement('button');
+      removeBtn.textContent = '×';
+      removeBtn.style = 'position:absolute;top:-8px;right:-8px;width:22px;height:22px;border-radius:50%;background:#ff6b6b;border:none;color:#fff;cursor:pointer;font-size:14px;line-height:1;z-index:2;';
+      removeBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        var currentIdx = selectedImageFiles.indexOf(file);
+        if (currentIdx > -1) {
+          selectedImageFiles.splice(currentIdx, 1);
+          renderImagePreview();
+        }
+      });
+      
+      container.appendChild(img);
+      container.appendChild(removeBtn);
+      preview.appendChild(container);
+    })(selectedImageFiles[i]);
   }
 }
 
@@ -567,6 +738,7 @@ function openWriteModal() {
   document.getElementById('writeModalTitle').textContent = '写记录';
   document.getElementById('diaryTitle').value = '';
   document.getElementById('diaryContent').value = '';
+  document.querySelectorAll('.mood-option').forEach(function(el) { el.classList.remove('selected'); });
   document.getElementById('diaryDate').value = year + '-' + month + '-' + day;
   document.getElementById('diaryTime').value = hours + ':' + minutes;
   document.getElementById('diaryVisibility').value = 'public';
@@ -599,6 +771,14 @@ function closeWriteModal(skipConfirm) {
   document.getElementById('recordingStatus').style.display = 'none';
   document.getElementById('recordAudioBtn').textContent = '🎤 录音';
   document.getElementById('recordAudioBtn').style.background = '';
+
+  if (typeof mediaRecorder !== 'undefined' && mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop();
+  }
+  if (window.recordingAudioCtx) {
+    try { window.recordingAudioCtx.close(); } catch(e) {}
+    window.recordingAudioCtx = null;
+  }
 }
 
 document.getElementById('closeWriteModal').addEventListener('click', function() {
@@ -823,16 +1003,17 @@ async function loadUserTheme() {
   }
 }
 
-// 粒子特效
+// 华丽星辉连线粒子特效 (针对移动端深度优化性能)
 function initParticles() {
   var canvas = document.getElementById('particles');
   var ctx = canvas.getContext('2d');
   var particles = [];
-  var isLightTheme = false;
+  var pointer = { x: null, y: null, radius: 120 }; // 触控/鼠标互动半径
 
   function resize() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
+    init(); // 尺寸变化时重新生成，保证分布均匀
   }
 
   function getParticleColor() {
@@ -840,60 +1021,94 @@ function initParticles() {
     if (theme === 'light') {
       return { r: 120, g: 120, b: 125, a: 0.25 };
     } else if (theme === 'gold') {
-      return { r: 255, g: 215, b: 0, a: 0.5 };
+      return { r: 255, g: 215, b: 0, a: 0.4 };
     } else if (theme === 'warm') {
-      return { r: 255, g: 140, b: 170, a: 0.6 };
+      return { r: 255, g: 140, b: 170, a: 0.5 };
     } else if (theme === 'sky') {
       return { r: 100, g: 160, b: 220, a: 0.35 };
     } else if (theme === 'green') {
       return { r: 100, g: 200, b: 140, a: 0.4 };
     }
-    return { r: 100, g: 180, b: 255, a: 0.5 };
+    return { r: 100, g: 180, b: 255, a: 0.4 };
   }
 
-  function createParticle() {
+  function init() {
+    particles = [];
+    // 性能优化核心：手机端减少粒子数量，电脑端展示华丽效果
+    var count = window.innerWidth < 768 ? 45 : 100;
     var color = getParticleColor();
-    return {
-      x: Math.random() * canvas.width,
-      y: canvas.height + 10,
-      size: Math.random() * 3 + 1,
-      speedY: Math.random() * 0.5 + 0.2,
-      speedX: (Math.random() - 0.5) * 0.3,
-      opacity: Math.random() * 0.5 + 0.3,
-      color: color
-    };
-  }
-
-  function updateParticle(p) {
-    p.y -= p.speedY;
-    p.x += p.speedX;
-    p.opacity -= 0.001;
-  }
-
-  function drawParticle(p) {
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(' + p.color.r + ',' + p.color.g + ',' + p.color.b + ',' + (p.opacity * p.color.a) + ')';
-    ctx.fill();
+    for (var i = 0; i < count; i++) {
+      particles.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        size: Math.random() * 2 + 0.5,
+        vx: (Math.random() - 0.5) * 0.6, // 缓慢漂浮
+        vy: (Math.random() - 0.5) * 0.6,
+        color: color
+      });
+    }
   }
 
   function animate() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    var color = getParticleColor(); // 实时获取主题色
 
-    if (particles.length < 80) {
-      particles.push(createParticle());
-    }
+    for (var i = 0; i < particles.length; i++) {
+      var p = particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
 
-    for (var i = particles.length - 1; i >= 0; i--) {
-      updateParticle(particles[i]);
-      drawParticle(particles[i]);
-      if (particles[i].y < -10 || particles[i].opacity <= 0) {
-        particles.splice(i, 1);
+      // 边缘反弹
+      if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
+      if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
+
+      // 手指/鼠标排斥互动
+      if (pointer.x !== null && pointer.y !== null) {
+        var dx = pointer.x - p.x;
+        var dy = pointer.y - p.y;
+        var distSq = dx * dx + dy * dy;
+        if (distSq < pointer.radius * pointer.radius) {
+          p.x -= dx * 0.02; // 轻柔的排斥力
+          p.y -= dy * 0.02;
+        }
+      }
+
+      // 绘制粒子圆点
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(' + color.r + ',' + color.g + ',' + color.b + ',' + color.a + ')';
+      ctx.fill();
+
+      // 绘制连线 (Constellation 网状效果)
+      for (var j = i + 1; j < particles.length; j++) {
+        var p2 = particles[j];
+        var dx2 = p.x - p2.x;
+        var dy2 = p.y - p2.y;
+        var distSq2 = dx2 * dx2 + dy2 * dy2;
+        // 手机端减少连线距离，进一步节省性能
+        var minDist = window.innerWidth < 768 ? 70 : 120;
+        if (distSq2 < minDist * minDist) {
+          // 距离越近，线条越不透明
+          var opacity = 1 - Math.sqrt(distSq2) / minDist;
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y);
+          ctx.lineTo(p2.x, p2.y);
+          ctx.strokeStyle = 'rgba(' + color.r + ',' + color.g + ',' + color.b + ',' + (opacity * color.a * 0.6) + ')';
+          ctx.lineWidth = window.innerWidth < 768 ? 0.6 : 0.8;
+          ctx.stroke();
+        }
       }
     }
 
     requestAnimationFrame(animate);
   }
+
+  // 绑定鼠标与触摸事件
+  window.addEventListener('mousemove', function(e) { pointer.x = e.clientX; pointer.y = e.clientY; });
+  window.addEventListener('mouseout', function() { pointer.x = null; pointer.y = null; });
+  window.addEventListener('touchstart', function(e) { pointer.x = e.touches[0].clientX; pointer.y = e.touches[0].clientY; }, {passive: true});
+  window.addEventListener('touchmove', function(e) { pointer.x = e.touches[0].clientX; pointer.y = e.touches[0].clientY; }, {passive: true});
+  window.addEventListener('touchend', function() { pointer.x = null; pointer.y = null; });
 
   resize();
   window.addEventListener('resize', resize);
@@ -901,7 +1116,7 @@ function initParticles() {
 
   // 主题变化时更新粒子颜色
   var observer = new MutationObserver(function() {
-    particles = [];
+    // 主题变化时，动画循环会自动获取新的颜色，无需重置粒子
   });
   observer.observe(document.body, { attributes: true, attributeFilter: ['data-theme'] });
 }

@@ -7,11 +7,14 @@ service cloud.firestore {
       allow write: if request.auth.uid == userId;
     }
 
-    // 日记 - 登录后可读，自己的可写
+    // 日记 - 登录后可读，创建者和共建者可写
     match /diaries/{diaryId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if request.auth.uid == resource.data.userId;
+      allow update: if request.auth.uid == resource.data.userId ||
+                     (resource.data.coAuthors != null && request.auth.uid in resource.data.coAuthors);
+      allow delete: if request.auth.uid == resource.data.userId ||
+                    (resource.data.coAuthors != null && request.auth.uid in resource.data.coAuthors);
     }
 
     // 链接 - 登录后可读写，链接双方都可以删除
@@ -30,12 +33,14 @@ service cloud.firestore {
       allow delete: if request.auth.uid == resource.data.userId || request.auth.uid == resource.data.diaryOwnerId;
     }
 
-    // 纪念日 - 登录后可读写，自己的可删除
+    // 纪念日 - 登录后可读写，创建者和共建者可删除
     match /anniversaries/{anniversaryId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow update: if request.auth.uid == resource.data.userId;
-      allow delete: if request.auth.uid == resource.data.userId;
+      allow update: if request.auth.uid == resource.data.userId ||
+                     (resource.data.coAuthors != null && request.auth.uid in resource.data.coAuthors);
+      allow delete: if request.auth.uid == resource.data.userId ||
+                    (resource.data.coAuthors != null && request.auth.uid in resource.data.coAuthors);
     }
   }
 }
