@@ -38,6 +38,14 @@
       to { opacity: 1; }
     }
     
+    /* 转圈圈动画 */
+    .spin-anim {
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
     /* 心情选项交互样式 */
     .mood-option { opacity: 0.4; transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1); display: inline-block; }
     .mood-option:hover { opacity: 0.8; transform: scale(1.1); }

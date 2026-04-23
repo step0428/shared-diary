@@ -64,7 +64,7 @@ service cloud.firestore {
         allow read: if request.auth != null;
         allow create: if request.auth != null;
         allow update: if false;
-        allow delete: if request.auth.uid == resource.data.senderId;
+        allow delete: if request.auth != null && (request.auth.uid == resource.data.senderId || resource.data.senderId == 'AI_COMPANION_USER_ID' || resource.data.isAIDiary == true);
       }
     }
   }

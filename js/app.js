@@ -331,26 +331,26 @@ window.renderAiApiConfig = function() {
   detailsArea.innerHTML = `
     <div>
       <label style="font-size:12px;color:var(--text-muted);margin-bottom:4px;display:block;">预设名称</label>
-      <input type="text" value="${escapeHtml(api.name)}" onchange="updateApiConfig('${api.id}', 'name', this.value)" style="width:100%;padding:10px 12px;background:rgba(0,0,0,0.2);border:1px solid var(--border);border-radius:8px;color:#fff;font-size:13px;box-sizing:border-box;">
+      <input type="text" value="${escapeHtml(api.name)}" onchange="updateApiConfig('${api.id}', 'name', this.value)" style="width:100%;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:13px;box-sizing:border-box;">
     </div>
     
-    <div style="display:flex;gap:10px;margin:5px 0;background:rgba(0,0,0,0.2);padding:4px;border-radius:10px;border:1px solid var(--border);">
+    <div style="display:flex;gap:10px;margin:5px 0;background:var(--bg-tertiary);padding:4px;border-radius:10px;border:1px solid var(--border);">
       <button onclick="window.apiConfigTab='main'; renderAiApiConfig();" style="flex:1;padding:8px;border-radius:8px;border:none;background:${!isSub ? 'var(--accent)' : 'transparent'};color:${!isSub ? '#fff' : 'var(--text-muted)'};cursor:pointer;font-size:13px;font-weight:500;transition:all 0.2s;">主 API</button>
       <button onclick="window.apiConfigTab='sub'; renderAiApiConfig();" style="flex:1;padding:8px;border-radius:8px;border:none;background:${isSub ? 'var(--accent)' : 'transparent'};color:${isSub ? '#fff' : 'var(--text-muted)'};cursor:pointer;font-size:13px;font-weight:500;transition:all 0.2s;">副 API (记忆专用)</button>
     </div>
 
     <div>
       <label style="font-size:12px;color:var(--text-muted);margin-bottom:4px;display:block;">接口 URL (填写到 /v1 即可)</label>
-      <input type="text" placeholder="${urlPlaceholder}" value="${escapeHtml(api[urlField] || '')}" onchange="updateApiConfig('${api.id}', '${urlField}', this.value)" style="width:100%;padding:10px 12px;background:rgba(0,0,0,0.2);border:1px solid var(--border);border-radius:8px;color:#fff;font-size:13px;box-sizing:border-box;">
+      <input type="text" placeholder="${urlPlaceholder}" value="${escapeHtml(api[urlField] || '')}" onchange="updateApiConfig('${api.id}', '${urlField}', this.value)" style="width:100%;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:13px;box-sizing:border-box;">
     </div>
     <div>
       <label style="font-size:12px;color:var(--text-muted);margin-bottom:4px;display:block;">API Key (sk-...)</label>
-      <input type="password" placeholder="${keyPlaceholder}" value="${escapeHtml(api[keyField] || '')}" onchange="updateApiConfig('${api.id}', '${keyField}', this.value)" style="width:100%;padding:10px 12px;background:rgba(0,0,0,0.2);border:1px solid var(--border);border-radius:8px;color:#fff;font-size:13px;box-sizing:border-box;">
+      <input type="password" placeholder="${keyPlaceholder}" value="${escapeHtml(api[keyField] || '')}" onchange="updateApiConfig('${api.id}', '${keyField}', this.value)" style="width:100%;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:13px;box-sizing:border-box;">
     </div>
     <div>
       <label style="font-size:12px;color:var(--text-muted);margin-bottom:4px;display:block;">模型选择</label>
       <div style="display:flex;gap:8px;">
-        <input type="text" id="model_input_${api.id}" placeholder="如 gpt-3.5-turbo" value="${escapeHtml(api[modelField] || 'gpt-3.5-turbo')}" onchange="updateApiConfig('${api.id}', '${modelField}', this.value)" style="flex:1;padding:10px 12px;background:rgba(0,0,0,0.2);border:1px solid var(--border);border-radius:8px;color:#fff;font-size:13px;box-sizing:border-box;">
+        <input type="text" id="model_input_${api.id}" placeholder="如 gpt-3.5-turbo" value="${escapeHtml(api[modelField] || 'gpt-3.5-turbo')}" onchange="updateApiConfig('${api.id}', '${modelField}', this.value)" style="flex:1;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:13px;box-sizing:border-box;">
         <button id="fetch_model_btn_${api.id}" onclick="fetchAiModels('${api.id}')" style="padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:12px;cursor:pointer;white-space:nowrap;">获取列表</button>
       </div>
       <select id="model_select_${api.id}" style="display:none;width:100%;margin-top:8px;padding:10px 12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:13px;box-sizing:border-box;" onchange="updateApiConfig('${api.id}', '${modelField}', this.value); document.getElementById('model_input_${api.id}').value = this.value;"></select>
@@ -489,7 +489,7 @@ window.renderAiCharConfig = function() {
   });
 
   let tabsHtml = `
-    <div style="display:flex;gap:10px;margin-bottom:15px;background:rgba(0,0,0,0.2);padding:4px;border-radius:10px;border:1px solid var(--border);">
+    <div style="display:flex;gap:10px;margin-bottom:15px;background:var(--bg-tertiary);padding:4px;border-radius:10px;border:1px solid var(--border);">
       <button onclick="window.charConfigTab='basic'; renderAiCharConfig();" style="flex:1;padding:8px;border-radius:8px;border:none;background:${isBasic ? 'var(--accent)' : 'transparent'};color:${isBasic ? '#fff' : 'var(--text-muted)'};cursor:pointer;font-size:13px;font-weight:500;transition:all 0.2s;">🎭 设定与过往</button>
       <button onclick="window.charConfigTab='memory'; renderAiCharConfig();" style="flex:1;padding:8px;border-radius:8px;border:none;background:${!isBasic ? 'var(--accent)' : 'transparent'};color:${!isBasic ? '#fff' : 'var(--text-muted)'};cursor:pointer;font-size:13px;font-weight:500;transition:all 0.2s;">🧠 记忆矩阵</button>
     </div>
@@ -499,7 +499,7 @@ window.renderAiCharConfig = function() {
     <div style="display:flex;gap:10px;margin-bottom:12px;">
       <div style="flex:1;">
         <label style="font-size:12px;color:var(--text-muted);margin-bottom:4px;display:block;">角色名字</label>
-        <input type="text" value="${escapeHtml(char.name)}" onchange="updateCharConfig('${char.id}', 'name', this.value)" style="width:100%;padding:10px 12px;background:rgba(0,0,0,0.2);border:1px solid var(--border);border-radius:8px;color:#fff;font-size:13px;box-sizing:border-box;">
+        <input type="text" value="${escapeHtml(char.name)}" onchange="updateCharConfig('${char.id}', 'name', this.value)" style="width:100%;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:13px;box-sizing:border-box;">
       </div>
       <div style="width:50px;display:flex;flex-direction:column;align-items:center;">
         <label style="font-size:12px;color:var(--text-muted);margin-bottom:4px;display:block;">头像</label>
@@ -516,11 +516,11 @@ window.renderAiCharConfig = function() {
     </div>
     <div>
       <label style="font-size:12px;color:var(--text-muted);margin-bottom:4px;display:block;">世界观与人设 (Prompt)</label>
-      <textarea rows="6" placeholder="描绘ta的性格、世界观，以及你们的故事..." onchange="updateCharConfig('${char.id}', 'prompt', this.value)" style="width:100%;padding:10px 12px;background:rgba(0,0,0,0.2);border:1px solid var(--border);border-radius:8px;color:#fff;font-size:13px;box-sizing:border-box;resize:vertical;font-family:inherit;">${escapeHtml(char.prompt || '')}</textarea>
+      <textarea rows="6" placeholder="描绘ta的性格、世界观，以及你们的故事..." onchange="updateCharConfig('${char.id}', 'prompt', this.value)" style="width:100%;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:13px;box-sizing:border-box;resize:vertical;font-family:inherit;">${escapeHtml(char.prompt || '')}</textarea>
     </div>
     <div>
       <label style="font-size:12px;color:var(--text-muted);margin-bottom:4px;display:block;">过往经历 (Experience)</label>
-      <textarea rows="4" placeholder="ta的身世背景、过往经历，以及你们在遇到「久刹」前发生过的故事..." onchange="updateCharConfig('${char.id}', 'memory', this.value)" style="width:100%;padding:10px 12px;background:rgba(0,0,0,0.2);border:1px solid var(--border);border-radius:8px;color:#fff;font-size:13px;box-sizing:border-box;resize:vertical;font-family:inherit;">${escapeHtml(char.memory || '')}</textarea>
+      <textarea rows="4" placeholder="ta的身世背景、过往经历，以及你们在遇到「久刹」前发生过的故事..." onchange="updateCharConfig('${char.id}', 'memory', this.value)" style="width:100%;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:13px;box-sizing:border-box;resize:vertical;font-family:inherit;">${escapeHtml(char.memory || '')}</textarea>
       <p style="font-size:11px;color:var(--text-muted);margin-top:4px;">这部分经历将作为核心背景设定强制携带。</p>
     </div>
   `;
@@ -530,37 +530,37 @@ window.renderAiCharConfig = function() {
 
   let memoryHtml = `
     <div style="display:flex;gap:10px;margin-bottom:15px;">
-      <div style="flex:1;background:rgba(0,0,0,0.2);padding:12px;border-radius:10px;border:1px solid var(--border);">
+      <div style="flex:1;background:var(--bg-tertiary);padding:12px;border-radius:10px;border:1px solid var(--border);">
         <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:6px;">生成短期记忆 (a)</label>
         <div style="display:flex;align-items:center;gap:6px;">
-          <span style="font-size:12px;color:#fff;">每</span>
-          <input type="number" min="1" max="10" value="${interactThresh}" onchange="updateCharConfig('${char.id}', 'interactThreshold', parseInt(this.value))" style="width:45px;padding:6px;background:rgba(255,255,255,0.1);border:none;border-radius:6px;color:#fff;text-align:center;font-size:13px;">
-          <span style="font-size:12px;color:#fff;">次记录生成 1 条</span>
+          <span style="font-size:12px;color:var(--text-primary);">每</span>
+          <input type="number" min="1" max="10" value="${interactThresh}" onchange="updateCharConfig('${char.id}', 'interactThreshold', parseInt(this.value))" style="width:45px;padding:6px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);text-align:center;font-size:13px;">
+          <span style="font-size:12px;color:var(--text-primary);">次记录生成 1 条</span>
         </div>
       </div>
-      <div style="flex:1;background:rgba(0,0,0,0.2);padding:12px;border-radius:10px;border:1px solid var(--border);">
+      <div style="flex:1;background:var(--bg-tertiary);padding:12px;border-radius:10px;border:1px solid var(--border);">
         <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:6px;">触发大清洗 (b)</label>
         <div style="display:flex;align-items:center;gap:6px;">
-          <span style="font-size:12px;color:#fff;">满</span>
-          <input type="number" min="2" max="20" value="${archiveThresh}" onchange="updateCharConfig('${char.id}', 'archiveThreshold', parseInt(this.value))" style="width:45px;padding:6px;background:rgba(255,255,255,0.1);border:none;border-radius:6px;color:#fff;text-align:center;font-size:13px;">
-          <span style="font-size:12px;color:#fff;">条后自动归档</span>
+          <span style="font-size:12px;color:var(--text-primary);">满</span>
+          <input type="number" min="2" max="20" value="${archiveThresh}" onchange="updateCharConfig('${char.id}', 'archiveThreshold', parseInt(this.value))" style="width:45px;padding:6px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);text-align:center;font-size:13px;">
+          <span style="font-size:12px;color:var(--text-primary);">条后自动归档</span>
         </div>
       </div>
     </div>
     <div>
       <label style="font-size:12px;color:#ff8faa;margin-bottom:4px;display:block;font-weight:bold;">💠 核心记忆 (Core Memory)</label>
       <p style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">记录你们的重大事件、绝对的喜好/雷区、以及不可磨灭的印记。</p>
-      <textarea rows="4" placeholder="例如：主人的生日是... 主人对xx过敏... 我们约定过..." onchange="updateCharConfig('${char.id}', 'coreMemory', this.value)" style="width:100%;padding:10px 12px;background:rgba(255,143,170,0.05);border:1px solid rgba(255,143,170,0.3);border-radius:8px;color:#fff;font-size:13px;box-sizing:border-box;resize:vertical;font-family:inherit;">${escapeHtml(char.coreMemory || '')}</textarea>
+      <textarea rows="4" placeholder="例如：主人的生日是... 主人对xx过敏... 我们约定过..." onchange="updateCharConfig('${char.id}', 'coreMemory', this.value)" style="width:100%;padding:10px 12px;background:rgba(255,143,170,0.05);border:1px solid rgba(255,143,170,0.3);border-radius:8px;color:var(--text-primary);font-size:13px;box-sizing:border-box;resize:vertical;font-family:inherit;">${escapeHtml(char.coreMemory || '')}</textarea>
     </div>
     <div style="margin-top:12px;">
       <label style="font-size:12px;color:var(--accent);margin-bottom:4px;display:block;font-weight:bold;">📝 近期记忆 (Short-term Memory)</label>
       <p style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">最近的交互碎片，满一定数量后将自动触发总结归档。</p>
-      <textarea rows="4" placeholder="副 API 会自动将近期的流水账记录在此..." onchange="updateCharConfig('${char.id}', 'shortTermMemory', this.value)" style="width:100%;padding:10px 12px;background:rgba(100,180,255,0.05);border:1px solid rgba(100,180,255,0.3);border-radius:8px;color:#fff;font-size:13px;box-sizing:border-box;resize:vertical;font-family:inherit;">${escapeHtml(char.shortTermMemory || '')}</textarea>
+      <textarea rows="4" placeholder="副 API 会自动将近期的流水账记录在此..." onchange="updateCharConfig('${char.id}', 'shortTermMemory', this.value)" style="width:100%;padding:10px 12px;background:rgba(100,180,255,0.05);border:1px solid rgba(100,180,255,0.3);border-radius:8px;color:var(--text-primary);font-size:13px;box-sizing:border-box;resize:vertical;font-family:inherit;">${escapeHtml(char.shortTermMemory || '')}</textarea>
     </div>
     <div style="margin-top:12px;">
       <label style="font-size:12px;color:#52c97a;margin-bottom:4px;display:block;font-weight:bold;">📚 记忆归档 (Archived Summary)</label>
       <p style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">由大量近期记忆浓缩而成的大总结，记录长线剧情的发展。</p>
-      <textarea rows="4" placeholder="由系统自动总结的长期剧情回顾..." onchange="updateCharConfig('${char.id}', 'archivedMemory', this.value)" style="width:100%;padding:10px 12px;background:rgba(82,201,122,0.05);border:1px solid rgba(82,201,122,0.3);border-radius:8px;color:#fff;font-size:13px;box-sizing:border-box;resize:vertical;font-family:inherit;">${escapeHtml(char.archivedMemory || '')}</textarea>
+      <textarea rows="4" placeholder="由系统自动总结的长期剧情回顾..." onchange="updateCharConfig('${char.id}', 'archivedMemory', this.value)" style="width:100%;padding:10px 12px;background:rgba(82,201,122,0.05);border:1px solid rgba(82,201,122,0.3);border-radius:8px;color:var(--text-primary);font-size:13px;box-sizing:border-box;resize:vertical;font-family:inherit;">${escapeHtml(char.archivedMemory || '')}</textarea>
     </div>
   `;
 
@@ -766,12 +766,12 @@ window.renderAiPersonaConfig = function() {
   detailsArea.innerHTML = `
     <div>
       <label style="font-size:12px;color:var(--text-muted);margin-bottom:4px;display:block;">身份名称</label>
-      <input type="text" value="${escapeHtml(persona.name)}" onchange="updatePersonaConfig('${persona.id}', 'name', this.value)" style="width:100%;padding:10px 12px;background:rgba(0,0,0,0.2);border:1px solid var(--border);border-radius:8px;color:#fff;font-size:13px;box-sizing:border-box;">
+      <input type="text" value="${escapeHtml(persona.name)}" onchange="updatePersonaConfig('${persona.id}', 'name', this.value)" style="width:100%;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:13px;box-sizing:border-box;">
     </div>
     <div>
       <label style="font-size:12px;color:var(--text-muted);margin-bottom:4px;display:block;">自我设定 (Prompt)</label>
       <p style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">告诉 AI 你是谁、你的性格、背景、甚至是一些小怪癖。</p>
-      <textarea rows="6" placeholder="例如：我是你的造物主，平时说话比较幽默，喜欢随口吐槽，讨厌吃香菜..." onchange="updatePersonaConfig('${persona.id}', 'prompt', this.value)" style="width:100%;padding:10px 12px;background:rgba(0,0,0,0.2);border:1px solid var(--border);border-radius:8px;color:#fff;font-size:13px;box-sizing:border-box;resize:vertical;font-family:inherit;">${escapeHtml(persona.prompt || '')}</textarea>
+      <textarea rows="6" placeholder="例如：我是你的造物主，平时说话比较幽默，喜欢随口吐槽，讨厌吃香菜..." onchange="updatePersonaConfig('${persona.id}', 'prompt', this.value)" style="width:100%;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:13px;box-sizing:border-box;resize:vertical;font-family:inherit;">${escapeHtml(persona.prompt || '')}</textarea>
     </div>
   `;
 };
@@ -857,13 +857,13 @@ window.renderAiWorldbookConfig = function() {
     </div>
     <div>
       <label style="font-size:12px;color:var(--text-muted);margin-bottom:4px;display:block;">规则 / 词条名称</label>
-      <input type="text" value="${escapeHtml(wb.name)}" onchange="updateWorldbookConfig('${wb.id}', 'name', this.value)" style="width:100%;padding:10px 12px;background:rgba(0,0,0,0.2);border:1px solid var(--border);border-radius:8px;color:#fff;font-size:13px;box-sizing:border-box;">
+      <input type="text" value="${escapeHtml(wb.name)}" onchange="updateWorldbookConfig('${wb.id}', 'name', this.value)" style="width:100%;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:13px;box-sizing:border-box;">
     </div>
-    <div style="margin-top:5px;display:flex;gap:15px;background:rgba(0,0,0,0.2);padding:10px 12px;border-radius:8px;border:1px solid var(--border);">
-      <label style="font-size:13px;color:#fff;display:flex;align-items:center;gap:6px;cursor:pointer;">
+    <div style="margin-top:5px;display:flex;gap:15px;background:var(--bg-tertiary);padding:10px 12px;border-radius:8px;border:1px solid var(--border);">
+      <label style="font-size:13px;color:var(--text-primary);display:flex;align-items:center;gap:6px;cursor:pointer;">
         <input type="radio" name="wbType_${wb.id}" ${wb.isGlobal ? 'checked' : ''} onchange="updateWorldbookConfig('${wb.id}', 'isGlobal', true); renderAiWorldbookConfig();" style="accent-color:var(--accent);"> 全局生效
       </label>
-      <label style="font-size:13px;color:#fff;display:flex;align-items:center;gap:6px;cursor:pointer;">
+      <label style="font-size:13px;color:var(--text-primary);display:flex;align-items:center;gap:6px;cursor:pointer;">
         <input type="radio" name="wbType_${wb.id}" ${!wb.isGlobal ? 'checked' : ''} onchange="updateWorldbookConfig('${wb.id}', 'isGlobal', false); renderAiWorldbookConfig();" style="accent-color:var(--accent);"> 角色专属
       </label>
     </div>
@@ -877,7 +877,7 @@ window.renderAiWorldbookConfig = function() {
     ` : ''}
     <div style="margin-top:5px;">
       <label style="font-size:12px;color:var(--text-muted);margin-bottom:4px;display:block;">内容 (设定、禁忌或知识库)</label>
-      <textarea rows="6" placeholder="例如：设定背景在赛博朋克2077年；或者绝对禁止说废话..." onchange="updateWorldbookConfig('${wb.id}', 'content', this.value)" style="width:100%;padding:10px 12px;background:rgba(0,0,0,0.2);border:1px solid var(--border);border-radius:8px;color:#fff;font-size:13px;box-sizing:border-box;resize:vertical;font-family:inherit;">${escapeHtml(wb.content || '')}</textarea>
+      <textarea rows="6" placeholder="例如：设定背景在赛博朋克2077年；或者绝对禁止说废话..." onchange="updateWorldbookConfig('${wb.id}', 'content', this.value)" style="width:100%;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:13px;box-sizing:border-box;resize:vertical;font-family:inherit;">${escapeHtml(wb.content || '')}</textarea>
     </div>
   `;
 };

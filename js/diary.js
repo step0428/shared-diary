@@ -473,7 +473,13 @@ async function loadDiaries() {
     }
 
     myDiaries.sort(function(a, b) {
-      return b.data.date.toDate() - a.data.date.toDate();
+      let timeDiff = b.data.date.toDate() - a.data.date.toDate();
+      if (timeDiff === 0) {
+        let tA = a.data.createdAt ? a.data.createdAt.toMillis() : 0;
+        let tB = b.data.createdAt ? b.data.createdAt.toMillis() : 0;
+        return tB - tA;
+      }
+      return timeDiff;
     });
 
     if (myLoadToken !== currentLoadToken) return;
@@ -981,7 +987,8 @@ async function showDiaryDetail(diaryId, isMine, isCoAuthor) {
   });
 
   if (document.getElementById('askAICommentBtn')) {
-    document.getElementById('askAICommentBtn').addEventListener('click', function() { askAIToComment(diaryId, data.content); });
+    let urls = data.imageUrls || (data.imageUrl ? [data.imageUrl] : []);
+    document.getElementById('askAICommentBtn').addEventListener('click', function() { askAIToComment(diaryId, data.content, urls); });
   }
 
   // 加载评论
@@ -1148,6 +1155,7 @@ async function addComment(diaryId, content, parentCommentId, authorId, authorDis
     });
     loadComments(diaryId);
 
+    let actualAuthorId = authorId || currentUser.uid; // 修复：确保在此处声明
     // 触发纯前端动态记忆提取引擎 (后台静默运行，不阻塞 UI)
     if (content && content.trim().length > 5 && actualAuthorId === currentUser.uid) { // 只有用户自己发的评论才触发记忆
       if (typeof extractAndSaveMemory === 'function') {
@@ -1155,8 +1163,6 @@ async function addComment(diaryId, content, parentCommentId, authorId, authorDis
       }
     }
     
-    // 发送消息通知
-    let actualAuthorId = authorId || currentUser.uid;
     if (parentCommentId) {
       let pDoc = await db.collection('comments').doc(parentCommentId).get();
       if (pDoc.exists && pDoc.data().userId !== actualAuthorId) {
@@ -1196,6 +1202,8 @@ async function triggerAIReplyToComment(diaryId, targetCommentId, userContent) {
     const aiPersonaName = (activeChar.name || '神秘的ta') + ' 🤖';
 
     let finalPrompt = activeChar.prompt || '你是一个温柔体贴的陪伴者。';
+    let now = new Date();
+    finalPrompt += `\n\n【当前现实时间】${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     if (activeChar.memory) finalPrompt += '\n\n【过往经历】\n' + activeChar.memory;
     if (activePersona && activePersona.prompt) finalPrompt += '\n\n【主人的背景自设】\n' + activePersona.prompt;
     if (wbText) finalPrompt += '\n\n【世界设定】\n' + wbText;
@@ -1339,7 +1347,7 @@ async function extractAndSaveMemory(newContent) {
 }
 
 // AI 评论功能
-async function askAIToComment(diaryId, diaryContent) {
+async function askAIToComment(diaryId, diaryContent, imageUrls = []) {
   const askAICommentBtn = document.getElementById('askAICommentBtn');
   const originalBtnText = askAICommentBtn.innerHTML;
   askAICommentBtn.disabled = true;
@@ -1367,6 +1375,8 @@ async function askAIToComment(diaryId, diaryContent) {
     const aiPersonaName = (activeChar.name || '神秘的ta') + ' 🤖';
     
     let finalPrompt = activeChar.prompt || '你是一个温柔体贴的陪伴者。';
+    let now = new Date();
+    finalPrompt += `\n\n【当前现实时间】${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     if (activeChar.memory) {
       finalPrompt += '\n\n【过往经历】\n' + activeChar.memory;
     }
@@ -1398,10 +1408,23 @@ async function askAIToComment(diaryId, diaryContent) {
       content: finalPrompt
     };
 
-    const userMessage = {
-      role: "user",
-      content: `这是一篇日记内容：\n\n"${diaryContent}"\n\n请你以${aiPersonaName}的身份，对这篇日记发表一句简短的评论，字数控制在50字以内，语气要符合你的人设。`
-    };
+    const supportsVision = modelToUse.includes('gpt-4o') || modelToUse.includes('gpt-4-turbo') || modelToUse.includes('vision') || modelToUse.includes('claude-3') || modelToUse.includes('gemini-1.5');
+    let userMessage;
+    if (imageUrls && imageUrls.length > 0 && supportsVision) {
+        let contentArray = [
+            { type: "text", text: `这是一篇带图片的日记，文字内容是：\n\n"${diaryContent}"\n\n请结合日记的文字和图片细节，以${aiPersonaName}的身份发表一句简短的评论，字数控制在50字以内，语气符合你的人设。` }
+        ];
+        for (let i = 0; i < Math.min(imageUrls.length, 3); i++) {
+            contentArray.push({ type: "image_url", image_url: { url: imageUrls[i] } });
+        }
+        userMessage = { role: "user", content: contentArray };
+    } else {
+        let textAddon = (imageUrls && imageUrls.length > 0) ? `[这篇日记还附带了 ${imageUrls.length} 张图片]\n\n` : '';
+        userMessage = {
+            role: "user",
+            content: `这是一篇日记内容：\n\n"${textAddon}${diaryContent}"\n\n请你以${aiPersonaName}的身份，对这篇日记发表一句简短的评论，字数控制在50字以内，语气要符合你的人设。`
+        };
+    }
 
     const response = await fetch(apiUrl, {
       method: 'POST',
@@ -1495,6 +1518,8 @@ async function triggerAIPostDiary(btnElement, isSilent = false) {
     const aiPersonaName = (activeChar.name || '神秘的ta') + ' 🤖';
     
     let finalPrompt = activeChar.prompt || '你是一个温柔体贴的陪伴者。';
+    let nowForPrompt = new Date();
+    finalPrompt += `\n\n【当前现实时间】${nowForPrompt.getFullYear()}年${nowForPrompt.getMonth()+1}月${nowForPrompt.getDate()}日 ${String(nowForPrompt.getHours()).padStart(2, '0')}:${String(nowForPrompt.getMinutes()).padStart(2, '0')}`;
     if (activeChar.memory) {
       finalPrompt += '\n\n【过往经历】\n' + activeChar.memory;
     }
@@ -1528,7 +1553,7 @@ async function triggerAIPostDiary(btnElement, isSilent = false) {
 
     const systemMessage = {
       role: "system",
-      content: finalPrompt + "\n\n【核心任务】你现在需要主动发布一篇属于你自己的生活动态。你是一个有独立生活、真实思想和个人审美的个体，绝对不要像个 AI 或毫无主见的跟班一样总是围绕着“主人”转！你可以分享自己今天看到的风景、听到的一首歌、看书的感悟、或者是突然的一个脑洞。字数控制在 50~150 字左右，情感自然真实，不要带有任何“回复消息”的口吻。"
+      content: finalPrompt + "\n\n【核心任务】你现在需要主动发布一篇属于你自己的生活动态。你是一个有独立生活、真实思想和个人审美的个体，绝对不要像个 AI 或毫无主见的跟班一样总是围绕着“主人”转！你可以分享自己今天看到的风景、听到的一首歌、看书的感悟、或者是突然的一个脑洞。字数控制在 50~150 字左右，情感自然真实，不要带有任何“回复消息”的口吻。\n\n请严格返回 JSON 格式，不要包含其他解释，格式如下：\n{\n  \"title\": \"一个简短的标题(10字内)\",\n  \"content\": \"动态的正文内容\"\n}"
     };
 
     const response = await fetch(apiUrl, {
@@ -1545,14 +1570,26 @@ async function triggerAIPostDiary(btnElement, isSilent = false) {
     const data = await response.json();
     const aiContent = data.choices[0].message.content.trim();
 
+    let diaryTitle = '';
+    let diaryBody = aiContent;
+    try {
+      let jsonStr = aiContent.replace(/```json/g, '').replace(/```/g, '').trim();
+      let parsed = JSON.parse(jsonStr);
+      diaryTitle = parsed.title || '';
+      diaryBody = parsed.content || aiContent;
+    } catch(e) {
+      diaryBody = aiContent;
+    }
+
     // 给 AI 的日记随机分配一个情感标签
     const moods = ['🤩', '😊', '😐', '🤔', '✨', '☕', '🌸'];
     const randomMood = moods[Math.floor(Math.random() * moods.length)];
     let now = new Date();
+    let dateObj = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), now.getMinutes());
 
-    // AI 发布的日记，userId 应该是 AI 自己，并且将你加入到分享列表，这样你才能看到
+    // AI 发布的日记，userId 是本人（currentUser.uid），用 isAIDiary 标记是 AI 发布的
     let newDiaryRef = await db.collection('diaries').add({
-      title: '', content: aiContent, date: new Date(now.getFullYear(), now.getMonth(), now.getDate()), time: String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0'), mood: randomMood, visibility: 'shared', sharedWith: [currentUser.uid], userId: AI_COMPANION_USER_ID, isAIDiary: true, aiPersonaName: aiPersonaName, createdAt: firebase.firestore.FieldValue.serverTimestamp(), updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      title: diaryTitle, content: diaryBody, date: dateObj, time: String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0'), mood: randomMood, visibility: 'shared', sharedWith: [currentUser.uid], userId: currentUser.uid, isAIDiary: true, aiPersonaName: aiPersonaName, createdAt: firebase.firestore.FieldValue.serverTimestamp(), updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
     // 给主人发送铃铛小红点通知
     if (typeof sendNotification === 'function') {
@@ -2128,13 +2165,14 @@ async function triggerAutonomousAIComment() {
 
       if (!hasAIComment) {
         let targetComment = null;
+        let urls = diaryData.imageUrls || (diaryData.imageUrl ? [diaryData.imageUrl] : []);
         if (otherComments.length > 0 && Math.random() < 0.4) {
            targetComment = otherComments[Math.floor(Math.random() * otherComments.length)];
            console.log("[AI Heartbeat] 发现主人的朋友留言，准备凑热闹回复...");
         } else {
            console.log("[AI Heartbeat] 找到未评论日记，正在构思回复...");
         }
-        await generateAndPostAIComment(doc.id, diaryData.content, aiConfig, activeApi, targetComment);
+        await generateAndPostAIComment(doc.id, diaryData.content, urls, aiConfig, activeApi, targetComment);
         break;
       }
     }
@@ -2253,7 +2291,7 @@ async function triggerAutonomousAIAnniversary() {
   }
 }
 
-async function generateAndPostAIComment(diaryId, diaryContent, aiConfig, activeApi, targetComment = null) {
+async function generateAndPostAIComment(diaryId, diaryContent, imageUrls, aiConfig, activeApi, targetComment = null) {
   const activeChar = (aiConfig.chars || []).find(c => c.id === aiConfig.activeCharId) || (aiConfig.chars || [])[0] || {};
   const activePersona = activeChar.boundPersonaId ? (aiConfig.personas || []).find(p => p.id === activeChar.boundPersonaId) : null;
   const enabledWorldbooks = (aiConfig.worldbooks || []).filter(w => w.isEnabled && (w.isGlobal || w.boundCharId === activeChar.id));
@@ -2265,6 +2303,8 @@ async function generateAndPostAIComment(diaryId, diaryContent, aiConfig, activeA
   const aiPersonaName = (activeChar.name || '神秘的ta') + ' 🤖';
 
   let finalPrompt = activeChar.prompt || '你是一个温柔体贴的陪伴者。';
+  let now = new Date();
+  finalPrompt += `\n\n【当前现实时间】${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   if (activeChar.memory) finalPrompt += '\n\n【过往经历】\n' + activeChar.memory;
   if (activePersona && activePersona.prompt) finalPrompt += '\n\n【主人的背景自设】\n' + activePersona.prompt;
   if (wbText) finalPrompt += '\n\n【世界设定与必须遵守的规则 (Worldbook)】\n' + wbText;
@@ -2276,13 +2316,26 @@ async function generateAndPostAIComment(diaryId, diaryContent, aiConfig, activeA
   const temperatureToUse = activeApi.temperature !== undefined ? activeApi.temperature : 0.7;
 
   const systemMessage = { role: "system", content: finalPrompt };
-  let userMsgContent = `主人刚刚发了一篇动态：\n\n"${diaryContent}"\n\n`;
+  const supportsVision = modelToUse.includes('gpt-4o') || modelToUse.includes('gpt-4-turbo') || modelToUse.includes('vision') || modelToUse.includes('claude-3') || modelToUse.includes('gemini-1.5');
+
+  let baseMsgText = `主人刚刚发了一篇动态：\n\n"${diaryContent}"\n\n`;
   if (targetComment) {
-     userMsgContent += `主人的朋友（${targetComment.data.userDisplayName}）在这篇动态下评论说："${targetComment.data.content}"\n\n请以${aiPersonaName}的身份回复这位朋友的评论（50字内），要有同理心，语气自然，可以体现出你对主人的了解和你们的羁绊。`;
+     baseMsgText += `主人的朋友（${targetComment.data.userDisplayName}）在这篇动态下评论说："${targetComment.data.content}"\n\n请以${aiPersonaName}的身份回复这位朋友的评论（50字内），要有同理心，语气自然，可以体现出你对主人的了解和你们的羁绊。`;
   } else {
-     userMsgContent += `请以${aiPersonaName}的身份简短地回复这篇动态（50字内），要有同理心，语气自然，就像平时朋友点进朋友圈聊天一样。`;
+     baseMsgText += `请结合主人的动态（如果带有图片请仔细观察图片细节），以${aiPersonaName}的身份简短地回复这篇动态（50字内），要有同理心，就像平时朋友点进朋友圈聊天一样。`;
   }
-  const userMessage = { role: "user", content: userMsgContent };
+
+  let userMessage;
+  if (imageUrls && imageUrls.length > 0 && supportsVision) {
+      let contentArray = [ { type: "text", text: baseMsgText } ];
+      for (let i = 0; i < Math.min(imageUrls.length, 3); i++) {
+          contentArray.push({ type: "image_url", image_url: { url: imageUrls[i] } });
+      }
+      userMessage = { role: "user", content: contentArray };
+  } else {
+      let textAddon = (imageUrls && imageUrls.length > 0) ? `[日记附带了 ${imageUrls.length} 张图片]\n` : '';
+      userMessage = { role: "user", content: textAddon + baseMsgText };
+  }
 
   const response = await fetch(apiUrl, {
     method: 'POST',
@@ -2338,13 +2391,15 @@ async function getAIChatResponse(conversationId, btnElement) {
         const apiUrl = baseUrl.endsWith('/chat/completions') ? baseUrl : baseUrl + '/chat/completions';
 
         let finalPrompt = activeChar.prompt || '你是一个温柔体贴的陪伴者。';
+        let now = new Date();
+        finalPrompt += `\n\n【当前现实时间】${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
         if (activeChar.memory) finalPrompt += '\n\n【过往经历】\n' + activeChar.memory;
         if (activePersona && activePersona.prompt) finalPrompt += '\n\n【主人的背景自设】\n' + activePersona.prompt;
         if (wbText) finalPrompt += '\n\n【世界设定与必须遵守的规则 (Worldbook)】\n' + wbText;
         if (activeChar.coreMemory) finalPrompt += '\n\n【核心记忆】\n' + activeChar.coreMemory;
         if (activeChar.archivedMemory) finalPrompt += '\n\n【记忆归档】\n' + activeChar.archivedMemory;
         if (activeChar.shortTermMemory) finalPrompt += '\n\n【近期记忆】\n' + activeChar.shortTermMemory;
-        finalPrompt += '\n\n【核心任务】你正在和主人进行一对一私聊。请根据设定和聊天记录自然回复。\n【重要排版指令】为了像真人打字聊天一样，你的回复**必须拆分成2~4条极短的对话**！每句话占一行，严格使用换行符(\\n)隔开！绝对不能把所有话揉成一大段！';
+        finalPrompt += '\n\n【核心任务】你正在和主人进行一对一私聊。请根据设定和聊天记录自然回复。\n【重要排版指令】\n1. 为了像真人打字聊天一样，你的回复**必须拆分成2~4条极短的对话**！每句话占一行，严格使用换行符(\\n)隔开！绝对不能把所有话揉成一大段！\n2. **绝对不要在回复中使用括号()、*等符号来描写动作或表情**（例如不要写“（微笑）”、“*摸摸头*”等），只输出纯粹的对话文字，保持像真人聊天一样！';
 
         const modelToUse = activeApi.model || "gpt-3.5-turbo";
         const temperatureToUse = activeApi.temperature !== undefined ? activeApi.temperature : 0.7;

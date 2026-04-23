@@ -244,9 +244,10 @@ function showChatMessageMenu(bubbleEl, conversationId, e) {
     let html = '';
     if (isMine) {
         if (isWithin2Mins) html += `<div class="menu-item" style="padding:12px 20px; cursor:pointer; font-size:14px; color:var(--text-primary);" onclick="recallChatMessage('${conversationId}', '${msgId}')">撤回</div>`;
+        if (isAI && bubbleEl.dataset.isLastUser === 'true') html += `<div class="menu-item" style="padding:12px 20px; cursor:pointer; font-size:14px; color:var(--accent);" onclick="regenerateLastAIResponse('${conversationId}')">🎲 重新生成回答</div>`;
         html += `<div class="menu-item" style="padding:12px 20px; cursor:pointer; font-size:14px; color:#ff6b6b;" onclick="deleteChatMessage('${conversationId}', '${msgId}')">删除</div>`;
-    } else if (isAI) {
-        html += `<div class="menu-item" style="padding:12px 20px; cursor:pointer; font-size:14px; color:var(--accent);" onclick="rerollChatMessage('${conversationId}', '${msgId}')">🎲 重roll此句</div>`;
+    } else {
+        html += `<div class="menu-item" style="padding:12px 20px; cursor:pointer; font-size:14px; color:#ff6b6b;" onclick="deleteChatMessage('${conversationId}', '${msgId}')">删除</div>`;
     }
 
     if (!html) return;
@@ -267,11 +268,30 @@ window.deleteChatMessage = async function(convId, msgId) { document.querySelecto
 
 window.recallChatMessage = async function(convId, msgId) { document.querySelectorAll('.chat-msg-menu').forEach(m => m.remove()); await db.collection('conversations').doc(convId).collection('messages').doc(msgId).delete(); };
 
-window.rerollChatMessage = async function(convId, msgId) {
+window.regenerateLastAIResponse = async function(convId) {
     document.querySelectorAll('.chat-msg-menu').forEach(m => m.remove());
-    await db.collection('conversations').doc(convId).collection('messages').doc(msgId).delete();
-    if (typeof getAIChatResponse === 'function') {
-        getAIChatResponse(convId, document.getElementById('askAIReplyBtn'));
+    try {
+        // 查找并删除此对话末尾所有 AI 发送的消息
+        const msgsSnap = await db.collection('conversations').doc(convId).collection('messages').orderBy('createdAt', 'desc').limit(20).get();
+        const batch = db.batch();
+        let deletedCount = 0;
+        for (let doc of msgsSnap.docs) {
+            if (doc.data().senderId === AI_COMPANION_USER_ID) {
+                batch.delete(doc.ref);
+                deletedCount++;
+            } else {
+                break; // 遇到用户发出的消息即停止删除
+            }
+        }
+        if (deletedCount > 0) {
+            await batch.commit();
+        }
+        // 重新请求 AI 回复
+        if (typeof getAIChatResponse === 'function') {
+            getAIChatResponse(convId, document.getElementById('askAIReplyBtn'));
+        }
+    } catch(e) {
+        console.error("重新生成失败:", e);
     }
 };
 
@@ -300,17 +320,23 @@ async function renderChatInterface(conversationId, otherUserName, otherUserAvata
         .onSnapshot(snapshot => {
             messagesEl.innerHTML = '';
             const docs = snapshot.docs;
+            
+            // 寻找最后一条由用户发出的消息ID
+            let lastUserMsgId = null;
+            docs.forEach(doc => {
+                if (doc.data().senderId === currentUser.uid) lastUserMsgId = doc.id;
+            });
+
             docs.forEach((doc, index) => {
                 const msg = doc.data();
                 const isMine = msg.senderId === currentUser.uid;
                 const timeMillis = msg.createdAt ? msg.createdAt.toMillis() : Date.now();
-                const isLast = index === docs.length - 1;
                 const messageDiv = document.createElement('div');
                 messageDiv.className = `chat-message ${isMine ? 'sent' : 'received'}`;
 
                 messageDiv.innerHTML = `
                     ${isMine ? myAvatarHtml : theirAvatarHtml}
-                    <div class="message-bubble" data-msg-id="${doc.id}" data-is-mine="${isMine}" data-timestamp="${timeMillis}">${escapeHtml(msg.text)}</div>
+                    <div class="message-bubble" data-msg-id="${doc.id}" data-is-mine="${isMine}" data-is-last-user="${doc.id === lastUserMsgId}" data-timestamp="${timeMillis}">${escapeHtml(msg.text)}</div>
                 `;
                 messagesEl.appendChild(messageDiv);
             });
@@ -330,7 +356,7 @@ async function sendMessage(conversationId, text, isSilent = false, customSenderI
         }
     }
 
-    const message = { senderId: senderId, text: text, createdAt: firebase.firestore.FieldValue.serverTimestamp() };
+    const message = { senderId: senderId, text: text, createdAt: firebase.firestore.FieldValue.serverTimestamp(), isAIDiary: senderId === AI_COMPANION_USER_ID };
     const convRef = db.collection('conversations').doc(conversationId);
     await convRef.collection('messages').add(message);
     await convRef.update({
