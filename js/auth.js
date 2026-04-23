@@ -285,7 +285,7 @@ let dragStart = { x: 0, y: 0 };
       '<div class="menu-item" onclick="openLinkModal()" style="padding:10px 16px;cursor:pointer;font-size:14px;color:var(--text);display:flex;align-items:center;gap:8px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>链接管理</div>' +
       '<div class="menu-item" onclick="editUserName()" style="padding:10px 16px;cursor:pointer;font-size:14px;color:var(--text);display:flex;align-items:center;gap:8px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>修改名称</div>' +
       '<div class="menu-item" onclick="showChangePasswordModal()" style="padding:10px 16px;cursor:pointer;font-size:14px;color:var(--text);display:flex;align-items:center;gap:8px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>修改密码</div>' +
-      '<div class="menu-item" onclick="openAISettingsModal()" style="padding:10px 16px;cursor:pointer;font-size:14px;color:var(--text);display:flex;align-items:center;gap:8px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"></path><path d="M16 16.24L12 20V16.24"></path><path d="M15.34 15.34L18.66 18.66"></path><path d="M7.34 7.34L4 4"></path><path d="M12 12H12.01"></path><path d="M12 12L16 8"></path><path d="M12 12L8 16"></path><path d="M12 12L15.34 15.34"></path><path d="M12 12L7.34 7.34"></path></svg>AI 助手设置</div>' +
+      '<div class="menu-item" onclick="openAISettingsModal()" style="padding:10px 16px;cursor:pointer;font-size:14px;color:var(--text);display:flex;align-items:center;gap:8px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"></rect><circle cx="12" cy="5" r="2"></circle><path d="M12 7v4"></path><line x1="8" y1="16" x2="8.01" y2="16"></line><line x1="16" y1="16" x2="16.01" y2="16"></line></svg>和ta遇见</div>' +
       divider +
       '<div class="menu-item" id="exportBackupBtn" style="padding:10px 16px;cursor:pointer;font-size:14px;color:var(--text);display:flex;align-items:center;gap:8px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>导出备份</div>' +
       '<label class="menu-item" id="importBackupLabel" style="padding:10px 16px;cursor:pointer;font-size:14px;color:var(--text);display:flex;align-items:center;gap:8px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>导入备份<input type="file" id="importFileInput" accept=".zip" style="display:none;"></label>' +
@@ -332,6 +332,16 @@ let dragStart = { x: 0, y: 0 };
     }
     loadLinkedUsers();
     document.getElementById('connectResult').classList.add('hidden');
+  };
+
+  // 打开和ta遇见设置弹窗
+  window.openAISettingsModal = function() {
+    var menu = document.getElementById('userMenuDropdown');
+    if (menu) menu.remove();
+    document.getElementById('aiSettingsModal').classList.remove('hidden');
+    if (typeof loadAISettings === 'function') {
+      loadAISettings();
+    }
   };
 
   function closeUserMenu(e) {

@@ -7,12 +7,14 @@ service cloud.firestore {
       allow write: if request.auth.uid == userId;
     }
 
-    // 日记 - 登录后可读，创建者和共建者可写
+    // 日记 - 登录后可读
     match /diaries/{diaryId} {
       allow read: if request.auth != null;
+      // 允许本人发日记（AI 日记也用本人的 userId）
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      // 允许共建者和本人更新
       allow update: if request.auth.uid == resource.data.userId ||
-                     (resource.data.coAuthors != null && request.auth.uid in resource.data.coAuthors);
+                   (resource.data.coAuthors != null && request.auth.uid in resource.data.coAuthors);
       allow delete: if request.auth.uid == resource.data.userId ||
                     (resource.data.coAuthors != null && request.auth.uid in resource.data.coAuthors);
     }
@@ -29,7 +31,7 @@ service cloud.firestore {
     match /comments/{commentId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null;
-      allow update: if request.auth.uid == resource.data.userId;
+      allow update: if request.auth != null;
       allow delete: if request.auth.uid == resource.data.userId || request.auth.uid == resource.data.diaryOwnerId;
     }
 
@@ -37,10 +39,33 @@ service cloud.firestore {
     match /anniversaries/{anniversaryId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow update: if request.auth.uid == resource.data.userId ||
-                     (resource.data.coAuthors != null && request.auth.uid in resource.data.coAuthors);
+      allow update: if request.auth != null;
       allow delete: if request.auth.uid == resource.data.userId ||
                     (resource.data.coAuthors != null && request.auth.uid in resource.data.coAuthors);
+    }
+
+    // 通知消息 - 核心修复
+    match /notifications/{notificationId} {
+      // 只能读取和更新（标记为已读）发给自己的通知
+      allow read, update: if request.auth != null && resource.data.userId == request.auth.uid;
+      // 允许任何人创建通知（用于给别人点赞、评论时静默发送提醒）
+      allow create: if request.auth != null;
+      // 暂时不允许删除通知，通过标记已读进行状态管理
+      allow delete: if false;
+    }
+
+    // 对话消息 - 需要添加
+    match /conversations/{conversationId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null;
+      allow delete: if false;
+      match /messages/{messageId} {
+        allow read: if request.auth != null;
+        allow create: if request.auth != null;
+        allow update: if false;
+        allow delete: if request.auth.uid == resource.data.senderId;
+      }
     }
   }
 }

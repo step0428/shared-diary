@@ -103,14 +103,17 @@ async function fetchWeather() {
     }
   } catch (e) {
     console.error('获取天气失败:', e);
-    // 使用默认天气（强制雨天）
+    // 使用默认天气
+    let hour = new Date().getHours();
+    let isNight = hour >= 19 || hour < 5;
+    let defaultCondition = isNight ? 'sunny' : 'rainy'; // 晚上默认晴天（流星），白天默认雨天
     weatherData = {
       temp: '',
-      condition: 'rainy',
+      condition: defaultCondition,
       location: ''
     };
     renderWeather();
-    startWeatherEffect('rainy');
+    startWeatherEffect(defaultCondition);
   }
 }
 

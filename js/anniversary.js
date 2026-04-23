@@ -255,9 +255,22 @@ async function showAnniversaryDetail(anniversaryId) {
     if (data.coAuthors) {
       data.coAuthors.forEach(function(uid) { if (userIds.indexOf(uid) === -1) userIds.push(uid); });
     }
-    var userInfos = await getBatchUserInfo(userIds);
+    
+    let queryIds = userIds.filter(id => id !== 'AI_COMPANION_USER_ID');
+    var userInfos = queryIds.length > 0 ? await getBatchUserInfo(queryIds) : [];
     var userMap = {};
     userInfos.forEach(function(u) { userMap[u.userId] = u; });
+    
+    if (userIds.includes('AI_COMPANION_USER_ID')) {
+       let aiConfig = currentUserData && currentUserData.aiConfig ? currentUserData.aiConfig : {};
+       let activeChar = (aiConfig.chars || []).find(c => c.id === aiConfig.activeCharId) || (aiConfig.chars || [])[0] || {};
+       userMap['AI_COMPANION_USER_ID'] = {
+           userId: 'AI_COMPANION_USER_ID',
+           displayName: (activeChar.name || '神秘的ta') + ' 🤖',
+           avatarUrl: '',
+           aiAvatar: activeChar.avatar || '🤖'
+       };
+    }
 
     var iconDisplay = data.icon || '💝';
     var visibilityText = {
@@ -411,9 +424,22 @@ async function loadAnniversaries() {
     }
 
     var userMap = {};
-    if (userIds.length > 0) {
-      var userInfos = await getBatchUserInfo(userIds);
+    let queryIds = userIds.filter(id => id !== 'AI_COMPANION_USER_ID');
+    if (queryIds.length > 0) {
+      var userInfos = await getBatchUserInfo(queryIds);
       userInfos.forEach(function(u) { userMap[u.userId] = u; });
+    }
+    
+    // 如果纪念日里有 AI，向 map 中注入 AI 身份信息
+    if (userIds.includes('AI_COMPANION_USER_ID')) {
+       let aiConfig = currentUserData && currentUserData.aiConfig ? currentUserData.aiConfig : {};
+       let activeChar = (aiConfig.chars || []).find(c => c.id === aiConfig.activeCharId) || (aiConfig.chars || [])[0] || {};
+       userMap['AI_COMPANION_USER_ID'] = {
+           userId: 'AI_COMPANION_USER_ID',
+           displayName: (activeChar.name || '神秘的ta') + ' 🤖',
+           avatarUrl: '',
+           aiAvatar: activeChar.avatar || '🤖'
+       };
     }
 
     validAnniversaries.forEach(function(ann) {
@@ -685,22 +711,40 @@ async function loadAnniversaryCoAuthors() {
   var coAuthorsList = document.getElementById('anniversaryCoAuthorsList');
   if (!coAuthorsList) return;
   coAuthorsList.innerHTML = '';
+  
   var linkedIds = await getLinkedUserIds();
-  if (linkedIds.length === 0) {
+  
+  // 优先注入 AI
+  if (currentUserData && currentUserData.aiConfig && currentUserData.aiConfig.enabled) {
+    let activeChar = (currentUserData.aiConfig.chars || []).find(c => c.id === currentUserData.aiConfig.activeCharId) || (currentUserData.aiConfig.chars || [])[0] || {};
+    let aiName = (activeChar.name || '神秘的ta') + ' 🤖';
+    var aiItem = document.createElement('label');
+    aiItem.className = 'share-item';
+    aiItem.innerHTML = '<input type="checkbox" value="AI_COMPANION_USER_ID"><span>' + escapeHtml(aiName) + '</span>';
+    var aiCheckbox = aiItem.querySelector('input');
+    aiCheckbox.addEventListener('change', function() {
+      this.closest('.share-item').classList.toggle('selected', this.checked);
+    });
+    coAuthorsList.appendChild(aiItem);
+  }
+  
+  if (linkedIds.length === 0 && coAuthorsList.children.length === 0) {
     coAuthorsList.innerHTML = '<span style="font-size:13px;color:var(--text-muted)">暂无链接的人</span>';
     return;
   }
-  var userInfos = await getBatchUserInfo(linkedIds);
-  userInfos.forEach(function(userData) {
-    var item = document.createElement('label');
-    item.className = 'share-item';
-    item.innerHTML = '<input type="checkbox" value="' + userData.userId + '"><span>' + escapeHtml(userData.displayName) + '</span>';
-    var checkbox = item.querySelector('input');
-    checkbox.addEventListener('change', function() {
-      this.closest('.share-item').classList.toggle('selected', this.checked);
+  if (linkedIds.length > 0) {
+    var userInfos = await getBatchUserInfo(linkedIds);
+    userInfos.forEach(function(userData) {
+      var item = document.createElement('label');
+      item.className = 'share-item';
+      item.innerHTML = '<input type="checkbox" value="' + userData.userId + '"><span>' + escapeHtml(userData.displayName) + '</span>';
+      var checkbox = item.querySelector('input');
+      checkbox.addEventListener('change', function() {
+        this.closest('.share-item').classList.toggle('selected', this.checked);
+      });
+      coAuthorsList.appendChild(item);
     });
-    coAuthorsList.appendChild(item);
-  });
+  }
 }
 
 // 全局标记是否已经庆祝过，避免每次刷新都喷发
