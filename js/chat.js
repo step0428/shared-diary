@@ -15,13 +15,64 @@ function setupChat() {
         currentConversationId = null;
     });
 
-    document.getElementById('chatInputForm').addEventListener('submit', (e) => {
+    window.selectedChatImageFile = null;
+    const chatImageBtn = document.getElementById('chatImageUploadBtn');
+    const chatImageInput = document.getElementById('chatImageInput');
+    const chatImagePreviewContainer = document.getElementById('chatImagePreviewContainer');
+    const chatImagePreview = document.getElementById('chatImagePreview');
+    const removeChatImageBtn = document.getElementById('removeChatImageBtn');
+
+    if (chatImageBtn) chatImageBtn.addEventListener('click', () => chatImageInput.click());
+    
+    if (chatImageInput) {
+        chatImageInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                window.selectedChatImageFile = file;
+                chatImagePreview.src = URL.createObjectURL(file);
+                chatImagePreviewContainer.style.display = 'block';
+                chatImageBtn.style.color = 'var(--accent)';
+            }
+            e.target.value = '';
+        });
+    }
+
+    if (removeChatImageBtn) {
+        removeChatImageBtn.addEventListener('click', () => {
+            window.selectedChatImageFile = null;
+            chatImagePreviewContainer.style.display = 'none';
+            chatImagePreview.src = '';
+            chatImageBtn.style.color = 'var(--text-muted)';
+        });
+    }
+
+    document.getElementById('chatInputForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         const input = document.getElementById('chatMessageInput');
         const text = input.value.trim();
-        if (text && currentConversationId) {
-            sendMessage(currentConversationId, text);
-            input.value = '';
+        const imageFile = window.selectedChatImageFile;
+        
+        if ((text || imageFile) && currentConversationId) {
+            const sendBtn = document.getElementById('sendChatMessageBtn');
+            const origText = sendBtn.textContent;
+            sendBtn.textContent = '...';
+            sendBtn.disabled = true;
+            
+            try {
+                let imageUrl = null;
+                if (imageFile) {
+                    imageUrl = await uploadToCloudinary(imageFile);
+                }
+                await sendMessage(currentConversationId, text, false, null, imageUrl);
+                input.value = '';
+                if (removeChatImageBtn) removeChatImageBtn.click();
+            } catch(err) {
+                console.error("发送失败:", err);
+                alert("发送失败，请重试");
+            } finally {
+                sendBtn.textContent = origText;
+                sendBtn.disabled = false;
+            }
         }
     });
 
@@ -125,6 +176,8 @@ async function openNewChatModal() {
     }
 }
 
+let currentConversationRenderToken = 0;
+
 async function loadConversations() {
     if (!currentUser) return;
     const listEl = document.getElementById('conversationList');
@@ -136,12 +189,15 @@ async function loadConversations() {
         .where('participants', 'array-contains', currentUser.uid)
         .orderBy('updatedAt', 'desc')
         .onSnapshot(async (snapshot) => {
+            const token = ++currentConversationRenderToken;
+
             if (snapshot.empty) {
-                listEl.innerHTML = '<div class="empty-state">还没有私信，快去和朋友或ta聊聊吧</div>';
+                if (token === currentConversationRenderToken) {
+                    listEl.innerHTML = '<div class="empty-state">还没有私信，快去和朋友或ta聊聊吧</div>';
+                }
                 return;
             }
 
-            listEl.innerHTML = '';
             const userIdsToFetch = new Set();
             snapshot.docs.forEach(doc => {
                 doc.data().participants.forEach(uid => {
@@ -150,6 +206,10 @@ async function loadConversations() {
             });
 
             const userInfos = await getBatchUserInfo(Array.from(userIdsToFetch));
+            
+            if (token !== currentConversationRenderToken) return;
+            listEl.innerHTML = '';
+
             const userInfoMap = new Map(userInfos.map(u => [u.userId, u]));
 
             if (currentUserData.aiConfig && currentUserData.aiConfig.enabled) {
@@ -336,7 +396,10 @@ async function renderChatInterface(conversationId, otherUserName, otherUserAvata
 
                 messageDiv.innerHTML = `
                     ${isMine ? myAvatarHtml : theirAvatarHtml}
-                    <div class="message-bubble" data-msg-id="${doc.id}" data-is-mine="${isMine}" data-is-last-user="${doc.id === lastUserMsgId}" data-timestamp="${timeMillis}">${escapeHtml(msg.text)}</div>
+                    <div class="message-bubble" data-msg-id="${doc.id}" data-is-mine="${isMine}" data-is-last-user="${doc.id === lastUserMsgId}" data-timestamp="${timeMillis}">
+                        ${msg.imageUrl ? `<img src="${escapeHtml(msg.imageUrl)}" style="max-width:200px; max-height:200px; border-radius:8px; margin-bottom:${msg.text ? '8px' : '0'}; cursor:pointer; display:block;" onclick="openImageViewer('${escapeHtml(msg.imageUrl)}')">` : ''}
+                        ${msg.text ? escapeHtml(msg.text) : ''}
+                    </div>
                 `;
                 messagesEl.appendChild(messageDiv);
             });
@@ -344,8 +407,8 @@ async function renderChatInterface(conversationId, otherUserName, otherUserAvata
         });
 }
 
-async function sendMessage(conversationId, text, isSilent = false, customSenderId = null) {
-    if (!currentUser || !text) return;
+async function sendMessage(conversationId, text, isSilent = false, customSenderId = null, imageUrl = null) {
+    if (!currentUser || (!text && !imageUrl)) return;
     const otherUserId = conversationId.replace(currentUser.uid, '').replace('_', '');
     const senderId = customSenderId || currentUser.uid;
 
@@ -356,11 +419,19 @@ async function sendMessage(conversationId, text, isSilent = false, customSenderI
         }
     }
 
-    const message = { senderId: senderId, text: text, createdAt: firebase.firestore.FieldValue.serverTimestamp(), isAIDiary: senderId === AI_COMPANION_USER_ID };
+    const message = { senderId: senderId, createdAt: firebase.firestore.FieldValue.serverTimestamp(), isAIDiary: senderId === AI_COMPANION_USER_ID };
+    if (text) message.text = text;
+    if (imageUrl) message.imageUrl = imageUrl;
+    
     const convRef = db.collection('conversations').doc(conversationId);
     await convRef.collection('messages').add(message);
+    
+    let lastMsgText = text;
+    if (!text && imageUrl) lastMsgText = '[图片]';
+    else if (text && imageUrl) lastMsgText = '[图片] ' + text;
+
     await convRef.update({
-        lastMessage: { text, senderId: senderId, timestamp: firebase.firestore.FieldValue.serverTimestamp() },
+        lastMessage: { text: lastMsgText, senderId: senderId, timestamp: firebase.firestore.FieldValue.serverTimestamp() },
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
 }

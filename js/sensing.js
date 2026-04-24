@@ -26,7 +26,8 @@ function renderGreeting() {
 let weatherData = {
   temp: null,
   condition: null, // sunny, cloudy, rainy, snowy
-  location: null
+  location: null,
+  method: null
 };
 
 // 天气图标映射
@@ -63,11 +64,52 @@ function getWeatherTip(condition) {
   return tips[condition] || '';
 }
 
+// 核心天气调度引擎
+function initWeatherEngine() {
+  const weatherSection = document.getElementById('weatherSection');
+  if (weatherSection) {
+    weatherSection.style.cursor = 'pointer';
+    weatherSection.title = '定位不准？点击手动设置常驻城市';
+    weatherSection.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openWeatherSettingsModal();
+    });
+  }
+  executeWeatherFetch();
+}
+
+async function openWeatherSettingsModal() {
+  const modal = document.getElementById('weatherSettingsModal');
+  if (!modal) return;
+  modal.classList.remove('hidden');
+
+  const ipDisplay = document.getElementById('currentIpDisplay');
+  const locDisplay = document.getElementById('currentLocationDisplay');
+  const cityInput = document.getElementById('manualCityInput');
+
+  ipDisplay.textContent = weatherData.location || '获取中...';
+  locDisplay.textContent = '当前定位方式：' + (weatherData.method || '未知');
+  cityInput.value = localStorage.getItem('manualWeatherCity') || '';
+
+  document.getElementById('weatherSettingsConfirm').onclick = () => {
+    const newCity = cityInput.value.trim();
+    if (newCity === '') localStorage.removeItem('manualWeatherCity');
+    else localStorage.setItem('manualWeatherCity', newCity);
+    
+    modal.classList.add('hidden');
+    executeWeatherFetch(); // 重新获取天气
+  };
+  
+  document.getElementById('weatherSettingsCancel').onclick = () => { modal.classList.add('hidden'); };
+  document.getElementById('closeWeatherSettingsModal').onclick = () => { modal.classList.add('hidden'); };
+}
+
 // 获取位置和天气
-async function fetchWeather() {
+async function fetchWeather(query = '', method = 'IP 网络定位') {
   try {
-    // 先尝试用IP获取位置（无需用户授权）
-    let response = await fetch('https://wttr.in/?format=j1');
+    // 取消对经纬度逗号的强转义，确保 wttr.in 接口正常解析坐标
+    let url = query ? `https://wttr.in/${query}?format=j1` : `https://wttr.in/?format=j1`;
+    let response = await fetch(url);
     let data = await response.json();
 
     if (data && data.current_condition && data.current_condition[0]) {
@@ -95,7 +137,8 @@ async function fetchWeather() {
       weatherData = {
         temp: temp,
         condition: condition,
-        location: data.nearest_area ? data.nearest_area[0].areaName[0].value : ''
+        location: data.nearest_area ? data.nearest_area[0].areaName[0].value : '未知地区',
+        method: method
       };
 
       renderWeather();
@@ -110,10 +153,45 @@ async function fetchWeather() {
     weatherData = {
       temp: '',
       condition: defaultCondition,
-      location: ''
+      location: '未知',
+      method: '获取失败'
     };
     renderWeather();
     startWeatherEffect(defaultCondition);
+  }
+}
+
+function executeWeatherFetch() {
+  const manualCity = localStorage.getItem('manualWeatherCity');
+  // 1. 最高优先级：用户手动绑定的城市
+  if (manualCity) {
+    console.log("[天气引擎] 命中降级策略：使用手动绑定城市", manualCity);
+    fetchWeather(manualCity, '手动绑定');
+    return;
+  }
+
+  // 2. 第二优先级：尝试 GPS 物理定位（无视 VPN）
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        console.log("[天气引擎] GPS 物理定位成功");
+        // 添加 '~' 符号，wttr.in 规定经纬度查询必须带波浪号前缀
+        fetchWeather(`~${position.coords.latitude},${position.coords.longitude}`, 'GPS 物理定位');
+      },
+      (error) => {
+        let reason = '';
+        if (error.code === 1) reason = '没给权限';
+        else if (error.code === 2) reason = '无GPS信号';
+        else if (error.code === 3) reason = '获取超时';
+        else reason = '未知阻拦';
+        // 3. 终极兜底：GPS 失败或被拒绝，无缝降级为 IP 定位
+        console.warn("[天气引擎] GPS 失败或被拒绝，降级为 IP 定位:", error.message);
+        fetchWeather('', `IP定位 (因手机GPS${reason})`);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 } // 再多给5秒寻找信号
+    );
+  } else {
+    fetchWeather('', 'IP定位 (非HTTPS安全环境拦截了GPS)');
   }
 }
 
@@ -360,7 +438,7 @@ function animateMeteors() {
 // 初始化天气和问候
 function initSensing() {
   renderGreeting();
-  fetchWeather();
+  initWeatherEngine();
 
   // 每分钟更新问候语
   setInterval(renderGreeting, 60000);

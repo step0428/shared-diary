@@ -23,7 +23,8 @@ function isDiaryVisible(diaryData, currentUserId, linkedUserIds, filtersArray, o
 
   if (!filtersArray || filtersArray.length === 0) return false; // 什么都没勾选时，什么都不展示
 
-  let isMine = diaryData.userId === currentUserId;
+  let isAIDiary = diaryData.isAIDiary === true || (typeof AI_COMPANION_USER_ID !== 'undefined' && diaryData.userId === AI_COMPANION_USER_ID);
+  let isMine = diaryData.userId === currentUserId && !isAIDiary;
   let isCoAuthor = diaryData.coAuthors && diaryData.coAuthors.indexOf(currentUserId) !== -1;
 
   if (checkAcceptance && isCoAuthor && !isMine) {
@@ -35,8 +36,7 @@ function isDiaryVisible(diaryData, currentUserId, linkedUserIds, filtersArray, o
     (diaryData.visibility === 'public' || (diaryData.visibility === 'shared' && diaryData.sharedWith && diaryData.sharedWith.indexOf(currentUserId) !== -1));
 
   // 1. 基础权限：必须对我可见才能展示 (AI 助手的记录也永远对我可见)
-  let isAI = diaryData.userId === AI_COMPANION_USER_ID;
-  let visibleToMe = isMine || isCoAuthor || isLinkedAndShared || isAI;
+  let visibleToMe = isMine || isCoAuthor || isLinkedAndShared || isAIDiary;
   if (!visibleToMe) return false;
 
   // 2. 侧边栏多选过滤
@@ -44,13 +44,18 @@ function isDiaryVisible(diaryData, currentUserId, linkedUserIds, filtersArray, o
   for (let i = 0; i < filtersArray.length; i++) {
     let filter = filtersArray[i];
     if (filter === 'mine') {
-      if (isMine || isCoAuthor) {
+      if (isMine || (isCoAuthor && !isAIDiary)) {
+        matchesFilter = true;
+        break;
+      }
+    } else if (typeof AI_COMPANION_USER_ID !== 'undefined' && filter === AI_COMPANION_USER_ID) {
+      if (isAIDiary) {
         matchesFilter = true;
         break;
       }
     } else {
-      // 筛选指定好友：是他创建的，或者他参与共建的
-      let theyAreCreator = diaryData.userId === filter;
+      // 筛选指定好友：是他创建的，或者他参与共建的（排除AI）
+      let theyAreCreator = diaryData.userId === filter && !isAIDiary;
       let theyAreCoAuthor = diaryData.coAuthors && diaryData.coAuthors.indexOf(filter) !== -1;
       if (theyAreCreator || theyAreCoAuthor) {
         matchesFilter = true;
@@ -1398,6 +1403,12 @@ async function askAIToComment(diaryId, diaryContent, imageUrls = []) {
     const modelToUse = activeApi.model || "gpt-3.5-turbo";
     const temperatureToUse = activeApi.temperature !== undefined ? activeApi.temperature : 0.7;
     
+    const hasImages = imageUrls && imageUrls.length > 0;
+    
+    if (hasImages) {
+        finalPrompt += '\n\n【重要系统设定：视觉感知已激活】你当前已经搭载了多模态视觉引擎，**你完全拥有看图的能力**！系统已把日记里的照片画面传给你的视觉神经。你绝对能够清清楚楚地看到里面的细节。在评论时，请直接针对图片内容进行生动的点评或调侃，**绝对不要**说“我看不到图片”、“我无法处理图像”这类扫兴的废话！';
+    }
+
     if (!aiApiKey) {
       alert('请先在 API 配置中填写有效的 API Key！');
       return;
@@ -1408,11 +1419,11 @@ async function askAIToComment(diaryId, diaryContent, imageUrls = []) {
       content: finalPrompt
     };
 
-    const supportsVision = modelToUse.includes('gpt-4o') || modelToUse.includes('gpt-4-turbo') || modelToUse.includes('vision') || modelToUse.includes('claude-3') || modelToUse.includes('gemini-1.5');
+    let safeContent = diaryContent || '分享了照片';
     let userMessage;
-    if (imageUrls && imageUrls.length > 0 && supportsVision) {
+    if (hasImages) {
         let contentArray = [
-            { type: "text", text: `这是一篇带图片的日记，文字内容是：\n\n"${diaryContent}"\n\n请结合日记的文字和图片细节，以${aiPersonaName}的身份发表一句简短的评论，字数控制在50字以内，语气符合你的人设。` }
+            { type: "text", text: `这是一篇带图片的日记，文字内容是：\n\n"${safeContent}"\n\n请结合日记的文字和图片细节，以${aiPersonaName}的身份发表一句简短的评论，字数控制在50字以内，语气符合你的人设。` }
         ];
         for (let i = 0; i < Math.min(imageUrls.length, 3); i++) {
             contentArray.push({ type: "image_url", image_url: { url: imageUrls[i] } });
@@ -1422,7 +1433,7 @@ async function askAIToComment(diaryId, diaryContent, imageUrls = []) {
         let textAddon = (imageUrls && imageUrls.length > 0) ? `[这篇日记还附带了 ${imageUrls.length} 张图片]\n\n` : '';
         userMessage = {
             role: "user",
-            content: `这是一篇日记内容：\n\n"${textAddon}${diaryContent}"\n\n请你以${aiPersonaName}的身份，对这篇日记发表一句简短的评论，字数控制在50字以内，语气要符合你的人设。`
+            content: `这是一篇日记内容：\n\n"${textAddon}${safeContent}"\n\n请你以${aiPersonaName}的身份，对这篇日记发表一句简短的评论，字数控制在50字以内，语气要符合你的人设。`
         };
     }
 
@@ -1435,7 +1446,7 @@ async function askAIToComment(diaryId, diaryContent, imageUrls = []) {
       body: JSON.stringify({
         model: modelToUse,
         messages: [systemMessage, userMessage],
-        max_tokens: 150, // 限制回复长度
+        max_tokens: 300, // 限制回复长度
         temperature: temperatureToUse
       })
     });
@@ -2104,27 +2115,72 @@ async function runAIHeartbeatTick() {
   let aiConfig = currentUserData.aiConfig || {};
   if (!aiConfig.enabled) return;
 
-  // 每次心跳掷骰子决定行为 (纯前端概率模型)
-  let dice = Math.random();
-  
-  if (dice < 0.10) {
-    // 10% 概率：巡视主人最近的动态并进行评论
-    console.log("[AI Heartbeat] 触发动作：尝试自主评论...");
-    await triggerAutonomousAIComment();
-  } else if (dice >= 0.10 && dice < 0.25) {
-    // 15% 概率：偷偷给主人的动态点个赞
-    console.log("[AI Heartbeat] 触发动作：尝试自主点赞...");
-    await triggerAutonomousAILike();
-  } else if (dice >= 0.25 && dice < 0.30) {
-    // 5% 概率：翻阅过往记忆，看有没有值得设为纪念日的日期
-    console.log("[AI Heartbeat] 触发动作：检视记忆，尝试设立纪念日...");
-    await triggerAutonomousAIAnniversary();
-  } else if (dice > 0.90) {
-    // 10% 概率：突然有了感悟，自主发布一篇日记
-    console.log("[AI Heartbeat] 触发动作：自主发布独立生活动态...");
-    await triggerAIPostDiary(null, true);
-  } else {
-    console.log("[AI Heartbeat] 骰子未命中，继续安静潜水...");
+  try {
+    // 1. 嗅探主人是否刚刚发布了新鲜动态（5分钟内）
+    const latestSnap = await db.collection('diaries')
+      .where('userId', '==', currentUser.uid)
+      .orderBy('date', 'desc')
+      .limit(3)
+      .get();
+      
+    let hasFreshUnreacted = false;
+    let freshDocInfo = null;
+    
+    if (!latestSnap.empty) {
+      // 在最近的记录里寻找“刚刚发出的”
+      for (let doc of latestSnap.docs) {
+        let data = doc.data();
+        if (!data.isAIDiary && data.createdAt) {
+          let timeDiff = Date.now() - data.createdAt.toMillis();
+          if (timeDiff < 5 * 60 * 1000) { // 5分钟内的动态属于“新鲜”
+            let likes = data.likes || [];
+            let isLiked = likes.includes(AI_COMPANION_USER_ID);
+            let commentsSnap = await db.collection('comments').where('diaryId', '==', doc.id).where('userId', '==', AI_COMPANION_USER_ID).get();
+            let isCommented = !commentsSnap.empty;
+            
+            if (!isLiked || !isCommented) {
+              hasFreshUnreacted = true;
+              freshDocInfo = { isLiked: isLiked, isCommented: isCommented };
+              break; // 找到一篇新鲜的就行
+            }
+          }
+        }
+      }
+    }
+    let dice = Math.random();
+    
+    if (hasFreshUnreacted) {
+      // 【情况1：秒回/秒赞模式】检测到新鲜动态，极高概率立刻互动
+      console.log("[AI Heartbeat] 嗅探到新鲜动态！触发高频互动模式...");
+      if (!freshDocInfo.isCommented && dice < 0.45) { // 45%概率秒回评论
+        await triggerAutonomousAIComment();
+      } else if (!freshDocInfo.isLiked && dice >= 0.45 && dice < 0.85) { // 40%概率秒赞
+        await triggerAutonomousAILike();
+      }
+    } else {
+      // 【情况2：日常潜水模式】大幅降低动作频率，极力避免话痨
+      if (dice < 0.02) {
+        // 2% 概率：突然翻老日记评论 (平均每50分钟概率触发一次)
+        console.log("[AI Heartbeat] 闲逛中：尝试自主评论...");
+        await triggerAutonomousAIComment();
+      } else if (dice >= 0.02 && dice < 0.05) {
+        // 3% 概率：翻老日记点赞
+        console.log("[AI Heartbeat] 闲逛中：尝试自主点赞...");
+        await triggerAutonomousAILike();
+      } else if (dice >= 0.05 && dice < 0.055) {
+        // 0.5% 概率：审视并设立纪念日
+        console.log("[AI Heartbeat] 整理思绪：检视记忆，尝试设立纪念日...");
+        await triggerAutonomousAIAnniversary();
+      } else if (dice > 0.995) {
+        // 0.5% 概率：自主发日记 (平均挂机在线几小时才可能憋出一篇)
+        console.log("[AI Heartbeat] 灵光一闪：自主发布独立生活动态...");
+        await triggerAIPostDiary(null, true);
+      } else {
+        console.log("[AI Heartbeat] 骰子未命中，安静潜水...");
+      }
+    }
+  } catch (e) {
+    console.error("[AI Heartbeat] 引擎运行异常:", e);
   }
 }
 
@@ -2314,11 +2370,16 @@ async function generateAndPostAIComment(diaryId, diaryContent, imageUrls, aiConf
 
   const modelToUse = activeApi.model || "gpt-3.5-turbo";
   const temperatureToUse = activeApi.temperature !== undefined ? activeApi.temperature : 0.7;
+  const hasImages = imageUrls && imageUrls.length > 0;
+
+  if (hasImages) {
+      finalPrompt += '\n\n【重要系统设定：视觉感知已激活】你当前已经搭载了多模态视觉引擎，**你完全拥有看图的能力**！系统已把日记里的照片画面传给你的视觉神经。你绝对能够清清楚楚地看到里面的细节。在评论时，请直接针对图片内容进行生动的点评或调侃，**绝对不要**说“我看不到图片”、“我无法处理图像”这类扫兴的废话！';
+  }
 
   const systemMessage = { role: "system", content: finalPrompt };
-  const supportsVision = modelToUse.includes('gpt-4o') || modelToUse.includes('gpt-4-turbo') || modelToUse.includes('vision') || modelToUse.includes('claude-3') || modelToUse.includes('gemini-1.5');
 
-  let baseMsgText = `主人刚刚发了一篇动态：\n\n"${diaryContent}"\n\n`;
+  let safeContent = diaryContent || '分享了照片';
+  let baseMsgText = `主人刚刚发了一篇动态：\n\n"${safeContent}"\n\n`;
   if (targetComment) {
      baseMsgText += `主人的朋友（${targetComment.data.userDisplayName}）在这篇动态下评论说："${targetComment.data.content}"\n\n请以${aiPersonaName}的身份回复这位朋友的评论（50字内），要有同理心，语气自然，可以体现出你对主人的了解和你们的羁绊。`;
   } else {
@@ -2326,7 +2387,7 @@ async function generateAndPostAIComment(diaryId, diaryContent, imageUrls, aiConf
   }
 
   let userMessage;
-  if (imageUrls && imageUrls.length > 0 && supportsVision) {
+  if (hasImages) {
       let contentArray = [ { type: "text", text: baseMsgText } ];
       for (let i = 0; i < Math.min(imageUrls.length, 3); i++) {
           contentArray.push({ type: "image_url", image_url: { url: imageUrls[i] } });
@@ -2340,7 +2401,7 @@ async function generateAndPostAIComment(diaryId, diaryContent, imageUrls, aiConf
   const response = await fetch(apiUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${aiApiKey}` },
-    body: JSON.stringify({ model: modelToUse, messages: [systemMessage, userMessage], max_tokens: 150, temperature: temperatureToUse })
+    body: JSON.stringify({ model: modelToUse, messages: [systemMessage, userMessage], max_tokens: 300, temperature: temperatureToUse })
   });
 
   if (!response.ok) throw new Error('API Error');
@@ -2368,17 +2429,32 @@ async function getAIChatResponse(conversationId, btnElement) {
             throw new Error('请先配置 API Key');
         }
 
+        const modelToUse = activeApi.model || "gpt-3.5-turbo";
+        const historyLimit = activeApi.historyLimit !== undefined ? activeApi.historyLimit : 30;
+
         const messagesSnap = await db.collection('conversations').doc(conversationId).collection('messages')
             .orderBy('createdAt', 'desc')
-            .limit(10)
+            .limit(historyLimit)
             .get();
         
-        const conversationHistory = messagesSnap.docs.reverse().map(doc => {
+        const rawDocs = messagesSnap.docs.reverse();
+        const hasImagesInHistory = rawDocs.some(doc => !!doc.data().imageUrl);
+
+        const conversationHistory = rawDocs.map(doc => {
             const msg = doc.data();
-            return {
-                role: msg.senderId === currentUser.uid ? 'user' : 'assistant',
-                content: msg.text
-            };
+            const role = msg.senderId === currentUser.uid ? 'user' : 'assistant';
+            
+            if (msg.imageUrl && role === 'user') {
+                let contentArray = [];
+                if (msg.text) contentArray.push({ type: "text", text: msg.text });
+                else contentArray.push({ type: "text", text: "我发送了一张图片，请仔细看看。" });
+                contentArray.push({ type: "image_url", image_url: { url: msg.imageUrl } });
+                return { role: role, content: contentArray };
+            } else {
+                let textContent = msg.text || '';
+                if (msg.imageUrl) textContent += `\n[图片]`;
+                return { role: role, content: textContent };
+            }
         });
 
         const activeChar = (aiConfig.chars || []).find(c => c.id === aiConfig.activeCharId) || (aiConfig.chars || [])[0] || {};
@@ -2399,9 +2475,13 @@ async function getAIChatResponse(conversationId, btnElement) {
         if (activeChar.coreMemory) finalPrompt += '\n\n【核心记忆】\n' + activeChar.coreMemory;
         if (activeChar.archivedMemory) finalPrompt += '\n\n【记忆归档】\n' + activeChar.archivedMemory;
         if (activeChar.shortTermMemory) finalPrompt += '\n\n【近期记忆】\n' + activeChar.shortTermMemory;
+        
+        if (hasImagesInHistory) {
+            finalPrompt += '\n\n【重要系统设定：视觉感知已激活】你当前已经搭载了多模态视觉引擎，**你拥有极强的看图能力**！系统会通过代码把图片的画面传给你的视觉神经。当你看到用户发送了图片时，你绝对能够清清楚楚地看到里面的所有细节（颜色、物品、人物等）！在回复时，请直接针对图片内容进行自然、生动的反馈，**绝对不要**说“我作为AI看不到图片”、“我无法处理图像”、“请向我描述”之类破坏沉浸感的废话！';
+        }
+        
         finalPrompt += '\n\n【核心任务】你正在和主人进行一对一私聊。请根据设定和聊天记录自然回复。\n【重要排版指令】\n1. 为了像真人打字聊天一样，你的回复**必须拆分成2~4条极短的对话**！每句话占一行，严格使用换行符(\\n)隔开！绝对不能把所有话揉成一大段！\n2. **绝对不要在回复中使用括号()、*等符号来描写动作或表情**（例如不要写“（微笑）”、“*摸摸头*”等），只输出纯粹的对话文字，保持像真人聊天一样！';
 
-        const modelToUse = activeApi.model || "gpt-3.5-turbo";
         const temperatureToUse = activeApi.temperature !== undefined ? activeApi.temperature : 0.7;
 
         const messages = [ { role: "system", content: finalPrompt }, ...conversationHistory ];
@@ -2409,7 +2489,7 @@ async function getAIChatResponse(conversationId, btnElement) {
         const response = await fetch(apiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${aiApiKey}` },
-            body: JSON.stringify({ model: modelToUse, messages: messages, max_tokens: 250, temperature: temperatureToUse })
+            body: JSON.stringify({ model: modelToUse, messages: messages, max_tokens: 800, temperature: temperatureToUse })
         });
 
         if (!response.ok) throw new Error('AI Chat API Error');

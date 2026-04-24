@@ -131,6 +131,33 @@ function setupInfiniteScrollAndSearch() {
   });
 
   var searchInput = document.getElementById('diarySearchInput');
+  var searchToggleBtn = document.getElementById('searchToggleBtn');
+  var searchContainer = document.getElementById('searchContainer');
+  var clearSearchBtn = document.getElementById('clearSearchBtn');
+
+  if (searchToggleBtn && searchContainer && searchInput) {
+    searchToggleBtn.addEventListener('click', function() {
+      if (searchContainer.style.display === 'none') {
+        searchContainer.style.display = 'flex';
+        searchInput.focus();
+      } else {
+        searchContainer.style.display = 'none';
+        if (searchInput.value !== '') {
+          searchInput.value = '';
+          if (typeof loadDiaries === 'function') loadDiaries();
+        }
+      }
+    });
+  }
+  
+  if (clearSearchBtn && searchContainer && searchInput) {
+    clearSearchBtn.addEventListener('click', function() {
+      searchInput.value = '';
+      searchContainer.style.display = 'none';
+      if (typeof loadDiaries === 'function') loadDiaries();
+    });
+  }
+
   if (searchInput) {
     var searchTimeout = null;
     searchInput.addEventListener('input', function() {
@@ -322,8 +349,10 @@ window.renderAiApiConfig = function() {
   let keyField = isSub ? 'subKey' : 'key';
   let modelField = isSub ? 'subModel' : 'model';
   let tempField = isSub ? 'subTemperature' : 'temperature';
+  let historyLimitField = isSub ? 'subHistoryLimit' : 'historyLimit';
 
   let temp = api[tempField] !== undefined ? api[tempField] : 0.7;
+  let historyLimit = api[historyLimitField] !== undefined ? api[historyLimitField] : 30;
 
   let urlPlaceholder = isSub && api.url ? escapeHtml(api.url) : "如 https://api.openai.com/v1";
   let keyPlaceholder = isSub && api.key ? "默认同主 API Key" : "必填 (sk-...)";
@@ -361,6 +390,13 @@ window.renderAiApiConfig = function() {
         <span id="temp_val_${api.id}">${temp}</span>
       </div>
       <input type="range" min="0" max="1" step="0.1" value="${temp}" oninput="document.getElementById('temp_val_${api.id}').textContent = this.value" onchange="updateApiConfig('${api.id}', '${tempField}', parseFloat(this.value))" style="width:100%;cursor:pointer;">
+    </div>
+    <div style="margin-top:12px;">
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);margin-bottom:6px;">
+        <label>携带历史对话条数 (上下文记忆)</label>
+        <span id="historyLimit_val_${api.id}">${historyLimit}</span>
+      </div>
+      <input type="range" min="1" max="100" step="1" value="${historyLimit}" oninput="document.getElementById('historyLimit_val_${api.id}').textContent = this.value" onchange="updateApiConfig('${api.id}', '${historyLimitField}', parseInt(this.value))" style="width:100%;cursor:pointer;">
     </div>
   `;
 };
@@ -443,8 +479,8 @@ window.addAiApiConfig = function() {
   currentAiConfig.apis.push({ 
     id: newId, 
     name: '新预设', 
-    url: '', key: '', model: 'gpt-3.5-turbo', temperature: 0.7,
-    subUrl: '', subKey: '', subModel: 'gpt-3.5-turbo', subTemperature: 0.7
+    url: '', key: '', model: 'gpt-3.5-turbo', temperature: 0.7, historyLimit: 30,
+    subUrl: '', subKey: '', subModel: 'gpt-3.5-turbo', subTemperature: 0.7, subHistoryLimit: 30
   });
   window.editingApiId = newId;
   currentAiConfig.activeApiId = newId;

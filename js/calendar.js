@@ -183,16 +183,26 @@ async function loadCalendarEvents() {
       let visResult = isDiaryVisible(data, currentUser.uid, linkedIds, activeFilters, { checkAcceptance: true });
       if (!visResult) continue;
 
-      let isMine = data.userId === currentUser.uid;
+      let isAIDiary = data.isAIDiary === true || (typeof AI_COMPANION_USER_ID !== 'undefined' && data.userId === AI_COMPANION_USER_ID);
+      let isMine = data.userId === currentUser.uid && !isAIDiary;
       let isCoAuthor = data.coAuthors && data.coAuthors.indexOf(currentUser.uid) !== -1;
       let isPending = isCoAuthor && !isMine && (!data.acceptedCoAuthors || data.acceptedCoAuthors.indexOf(currentUser.uid) === -1);
       if (isPending) isCoAuthor = false;
 
       // 获取作者信息（从缓存，同步）
       let authorInfo = getUserInfoFromCache(data.userId);
+      
+      let finalAvatarUrl = authorInfo.avatarUrl;
+      let finalDisplayName = authorInfo.displayName;
+
+      if (isAIDiary && typeof currentUserData !== 'undefined' && currentUserData.aiConfig) {
+        let activeChar = (currentUserData.aiConfig.chars || []).find(c => c.id === currentUserData.aiConfig.activeCharId) || (currentUserData.aiConfig.chars || [])[0] || {};
+        finalDisplayName = (activeChar.name || '神秘的ta') + ' 🤖';
+        finalAvatarUrl = activeChar.avatar && activeChar.avatar.startsWith('http') ? activeChar.avatar : '';
+      }
 
       // 标题只显示记录标题
-      let title = data.title || (isMine ? '我的记录' : '已链接记录');
+      let title = data.title || (isAIDiary ? 'ta的动态' : (isMine ? '我的记录' : '已链接记录'));
 
       // 设置时间
       let eventDate = data.date.toDate();
@@ -225,8 +235,8 @@ async function loadCalendarEvents() {
         isMyDiary: isMine,
         isCoAuthor: isCoAuthor,
         tagColor: borderColor,
-        avatarUrl: authorInfo.avatarUrl,
-        displayName: authorInfo.displayName
+        avatarUrl: finalAvatarUrl,
+        displayName: finalDisplayName
       };
 
       // 如果是共建记录，获取所有共建者头像（从缓存）
