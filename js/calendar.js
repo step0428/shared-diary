@@ -269,32 +269,51 @@ async function loadCalendarEvents() {
     let anniversaries = await getAllAnniversariesForCalendar();
     for (let a = 0; a < anniversaries.length; a++) {
       let ann = anniversaries[a];
-      let result = calculateDays(ann.date, ann.isRepeating);
-      let targetDate = result.targetDate;
+      let originalDate = new Date(ann.date + 'T00:00:00');
+      let currentYear = new Date().getFullYear();
 
-      let eventTitle = ann.title;
       if (ann.isRepeating) {
-        // 如果是重复纪念日，计算今年是第几周年并在日历上显示
-        let years = targetDate.getFullYear() - result.originalDate.getFullYear();
-        if (years > 0) {
-          eventTitle += ' (' + years + '周年)';
+        let startYear = originalDate.getFullYear();
+        // 从起始年份一直铺设到未来2年，确保每年的日历上都有
+        for (let y = startYear; y <= currentYear + 2; y++) {
+          let eventDate = new Date(originalDate);
+          eventDate.setFullYear(y);
+          let years = y - startYear;
+          let eventTitle = ann.title;
+          if (years > 0) {
+            eventTitle += ' (' + years + '周年)';
+          }
+          events.push({
+            id: 'ann_' + ann.id + '_' + y,
+            title: (ann.icon || '💝') + ' ' + eventTitle,
+            start: eventDate,
+            display: 'block',
+            backgroundColor: 'var(--accent-light)',
+            borderColor: 'var(--accent)',
+            textColor: 'var(--accent)',
+            classNames: ['anniversary-event'],
+            extendedProps: {
+              anniversaryId: ann.id,
+              isAnniversary: true
+            }
+          });
         }
+      } else {
+        events.push({
+          id: 'ann_' + ann.id,
+          title: (ann.icon || '💝') + ' ' + ann.title,
+          start: originalDate,
+          display: 'block',
+          backgroundColor: 'var(--accent-light)',
+          borderColor: 'var(--accent)',
+          textColor: 'var(--accent)',
+          classNames: ['anniversary-event'],
+          extendedProps: {
+            anniversaryId: ann.id,
+            isAnniversary: true
+          }
+        });
       }
-
-      events.push({
-        id: 'ann_' + ann.id,
-        title: (ann.icon || '💝') + ' ' + eventTitle,
-        start: targetDate,
-        display: 'block',
-        backgroundColor: 'var(--accent-light)', // 自动跟随当前主题
-        borderColor: 'var(--accent)',           // 自动跟随当前主题
-        textColor: 'var(--accent)',             // 自动跟随当前主题
-        classNames: ['anniversary-event'],
-        extendedProps: {
-          anniversaryId: ann.id,
-          isAnniversary: true
-        }
-      });
     }
 
     calendar.removeAllEvents();

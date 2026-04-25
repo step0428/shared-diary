@@ -46,6 +46,12 @@
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
     }
+    /* 麦克风录音呼吸灯动画 */
+    @keyframes pulse {
+      0% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(1.1); }
+      100% { opacity: 1; transform: scale(1); }
+    }
     /* 心情选项交互样式 */
     .mood-option { opacity: 0.4; transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1); display: inline-block; }
     .mood-option:hover { opacity: 0.8; transform: scale(1.1); }
@@ -398,9 +404,9 @@
     </div>
 
     <!-- 通用输入弹窗 -->
-    <div class="modal hidden" id="inputModal" style="z-index:2000;">
+    <div class="modal hidden" id="inputModal" style="z-index:3200;">
       <div class="modal-backdrop"></div>
-      <div class="modal-content" style="max-width:360px;z-index:2001;">
+      <div class="modal-content" style="max-width:360px;z-index:3201;">
         <div class="modal-header">
           <h3 id="inputModalTitle">输入</h3>
           <button class="modal-close" id="closeInputModal">

@@ -274,36 +274,48 @@ async function saveUserCollections() {
   }
 }
 
-// 确保共建者都有某个合集（自动创建不存在的）
-async function ensureCollectionForCoAuthors(collectionId, coAuthors) {
-  // 获取当前用户的合集中这个合集的信息
-  let collection = userCollections.find(function(c) { return c.id === collectionId; });
-  if (!collection) return;
+// 确保共建者都有发起方的合集和标签（自动创建不存在的）
+async function ensureMetaForCoAuthors(collectionId, tagId, coAuthors) {
+  let collection = collectionId ? userCollections.find(function(c) { return c.id === collectionId; }) : null;
+  let tag = tagId ? userTags.find(function(t) { return t.id === tagId; }) : null;
 
-  // 遍历所有共建者
+  if (!collection && !tag) return;
+
   for (let i = 0; i < coAuthors.length; i++) {
     let uid = coAuthors[i];
     if (uid === currentUser.uid) continue; // 跳过自己
 
     try {
       let userDoc = await db.collection('users').doc(uid).get();
-      let userData = userDoc.data();
-      let userColls = userData.collections || [];
+      let userData = userDoc.data() || {};
+      let updates = {};
+      let changed = false;
 
-      // 检查是否已有这个合集
-      let exists = userColls.some(function(c) { return c.id === collectionId; });
-      if (!exists) {
-        // 添加合集
-        userColls.push({
-          id: collection.id,
-          name: collection.name
-        });
-        await db.collection('users').doc(uid).update({
-          collections: userColls
-        });
+      if (collection) {
+        let userColls = userData.collections || [];
+        let exists = userColls.some(function(c) { return c.id === collectionId; });
+        if (!exists) {
+          userColls.push({ id: collection.id, name: collection.name });
+          updates.collections = userColls;
+          changed = true;
+        }
+      }
+
+      if (tag) {
+        let uTags = userData.tags || [];
+        let exists = uTags.some(function(t) { return t.id === tagId; });
+        if (!exists) {
+          uTags.push({ id: tag.id, name: tag.name, color: tag.color });
+          updates.tags = uTags;
+          changed = true;
+        }
+      }
+
+      if (changed) {
+        await db.collection('users').doc(uid).update(updates);
       }
     } catch (e) {
-      console.error('为共建者创建合集失败:', e);
+      console.error('为共建者同步合集/标签失败:', e);
     }
   }
 }
@@ -610,8 +622,8 @@ window.renderMoreDiaries = async function(token) {
 
       let visibilityText = {
         'private': '仅自己可见',
-        'shared': '仅链接对象可见',
-        'public': '所有人可见',
+        'shared': '部分好友可见',
+        'public': '所有好友可见',
         'co-authored': '共建记录'
       }[data.visibility] || '';
 
@@ -924,8 +936,9 @@ async function showDiaryDetail(diaryId, isMine, isCoAuthor) {
   let moodHtml = data.mood ? '<span style="font-size:28px;margin-right:10px;vertical-align:middle;">' + data.mood + '</span>' : '';
   let titleHtml = data.title ? '<div class="diary-title-large">' + moodHtml + escapeHtml(data.title) + '</div>' : (data.mood ? '<div class="diary-title-large">' + moodHtml + '</div>' : '');
 
-  let editBtnHtml = isMine ? '<button id="editDiaryBtn" style="margin-top:20px;margin-right:10px;padding:10px 20px;background:let(--accent-light);border:1px solid var(--accent);border-radius:8px;color:var(--accent);cursor:pointer;">编辑</button>' : '';
-  let deleteBtnHtml = isMine ? '<button id="deleteDiaryBtn" style="margin-top:20px;padding:10px 20px;background:rgba(255,100,100,0.2);border:1px solid rgba(255,100,100,0.4);border-radius:8px;color:#ff6b6b;cursor:pointer;">删除</button>' : '';
+  let canEditOrDelete = isMine || isCoAuthor;
+  let editBtnHtml = canEditOrDelete ? '<button id="editDiaryBtn" style="margin-top:20px;margin-right:10px;padding:10px 20px;background:var(--accent-light);border:1px solid var(--accent);border-radius:8px;color:var(--accent);cursor:pointer;">编辑</button>' : '';
+  let deleteBtnHtml = canEditOrDelete ? '<button id="deleteDiaryBtn" style="margin-top:20px;padding:10px 20px;background:rgba(255,100,100,0.2);border:1px solid rgba(255,100,100,0.4);border-radius:8px;color:#ff6b6b;cursor:pointer;">删除</button>' : '';
 
   let isAIDiary = data.userId === AI_COMPANION_USER_ID || data.isAIDiary === true;
   let askAICommentBtn = !isAIDiary ? '<button id="askAICommentBtn" style="margin-top:20px;padding:10px 20px;background:var(--accent-light);border:1px solid var(--accent);border-radius:8px;color:var(--accent);cursor:pointer;font-size:14px;margin-left:10px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><rect x="3" y="11" width="18" height="10" rx="2"></rect><circle cx="12" cy="5" r="2"></circle><path d="M12 7v4"></path><line x1="8" y1="16" x2="8.01" y2="16"></line><line x1="16" y1="16" x2="16.01" y2="16"></line></svg>让ta评论</button>' : '';
@@ -976,7 +989,7 @@ async function showDiaryDetail(diaryId, isMine, isCoAuthor) {
   let contentEl = document.getElementById('diaryDetailContent');
   contentEl.innerHTML = '<div class="diary-meta"><span>' + dateStr + '</span>' + authorHtml + '</div>' + titleHtml + tagHtml + '<div class="diary-detail-text">' + escapeHtml(data.content) + '</div>' + imageHtml + audioHtml + musicHtml + '<div style="margin-top:15px;display:flex;align-items:center;gap:10px;">' + likeBtnHtml + editBtnHtml + deleteBtnHtml + askAICommentBtn + '</div>';
 
-  if (isMine) {
+  if (canEditOrDelete) {
     document.getElementById('editDiaryBtn').addEventListener('click', function() {
       editDiary(diaryId);
     });
@@ -993,20 +1006,62 @@ async function showDiaryDetail(diaryId, isMine, isCoAuthor) {
 
   if (document.getElementById('askAICommentBtn')) {
     let urls = data.imageUrls || (data.imageUrl ? [data.imageUrl] : []);
-    document.getElementById('askAICommentBtn').addEventListener('click', function() { askAIToComment(diaryId, data.content, urls); });
+    let audioTxt = data.audioText || null;
+    document.getElementById('askAICommentBtn').addEventListener('click', function(e) {
+      let chars = currentUserData.aiConfig.chars || [];
+      if (chars.length > 1) {
+        // 如果有多个角色，弹出优雅的选择菜单
+        showCharSelectionMenu(e.currentTarget, chars, function(selectedCharId) {
+          askAIToComment(diaryId, data.content, urls, data.userId, authorName, selectedCharId, audioTxt);
+        });
+      } else {
+        askAIToComment(diaryId, data.content, urls, data.userId, authorName, chars[0] ? chars[0].id : null, audioTxt);
+      }
+    });
   }
 
   // 加载评论
   loadComments(diaryId);
 
-  if (data.audioUrl) {
-    setTimeout(function() {
-      setupAudioVisualizer('diaryAudioPlayer', 'audioVisualizer');
-    }, 50);
-  }
-
   document.getElementById('diaryModal').classList.remove('hidden');
 }
+
+// 显示 AI 角色选择菜单 (全新组件)
+window.showCharSelectionMenu = function(buttonEl, chars, callback) {
+  let existing = document.getElementById('aiCharSelectMenu');
+  if (existing) existing.remove();
+
+  let menu = document.createElement('div');
+  menu.id = 'aiCharSelectMenu';
+  let rect = buttonEl.getBoundingClientRect();
+  menu.style.cssText = 'position:fixed; left:' + rect.left + 'px; top:' + (rect.bottom + 8) + 'px; background:var(--bg-secondary); border:1px solid var(--border); border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,0.2); z-index:3500; display:flex; flex-direction:column; overflow:hidden; min-width:150px;';
+  
+  let title = document.createElement('div');
+  title.style.cssText = 'padding:8px 12px; font-size:11px; color:var(--text-muted); background:var(--bg-tertiary); border-bottom:1px solid var(--border);';
+  title.textContent = '请选择出场的角色';
+  menu.appendChild(title);
+
+  chars.forEach(char => {
+      let item = document.createElement('div');
+      item.style.cssText = 'padding:10px 16px; cursor:pointer; font-size:14px; color:var(--text-primary); display:flex; align-items:center; gap:10px; transition:background 0.2s;';
+      let avatar = char.avatar || '🤖';
+      let avatarHtml = avatar.startsWith('http') ? '<img src="' + escapeHtml(avatar) + '" style="width:24px;height:24px;border-radius:50%;object-fit:cover;">' : '<span style="font-size:18px;">' + escapeHtml(avatar) + '</span>';
+      item.innerHTML = avatarHtml + '<span style="font-weight:500;">' + escapeHtml(char.name) + '</span>';
+      item.onmouseover = () => item.style.background = 'var(--hover-bg)';
+      item.onmouseout = () => item.style.background = 'transparent';
+      item.onclick = (e) => { e.stopPropagation(); menu.remove(); callback(char.id); };
+      menu.appendChild(item);
+  });
+
+  document.body.appendChild(menu);
+  setTimeout(() => {
+      const closeMenu = (ev) => {
+          if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', closeMenu); window.removeEventListener('scroll', closeMenu, true); }
+      };
+      document.addEventListener('click', closeMenu);
+      window.addEventListener('scroll', closeMenu, true); // 滚动时自动关闭
+  }, 0);
+};
 
 // 加载评论
 let currentDiaryIdForComment = null;
@@ -1017,6 +1072,7 @@ async function loadComments(diaryId) {
 
   let diaryDoc = await db.collection('diaries').doc(diaryId).get();
   let diaryOwnerId = diaryDoc.exists ? diaryDoc.data().userId : '';
+  let diaryCoAuthors = diaryDoc.exists ? (diaryDoc.data().coAuthors || []) : [];
 
   try {
     let snapshot = await db.collection('comments')
@@ -1068,12 +1124,17 @@ async function loadComments(diaryId) {
         let commentAuthorInfo = { userId: comment.userId, displayName: comment.userDisplayName, avatarUrl: comment.userAvatar };
         let avatarHtml = renderUserAvatar(commentAuthorInfo, 32);
 
-        let canDelete = currentUser.uid === diaryOwnerId || currentUser.uid === comment.userId;
+        let canDelete = currentUser.uid === diaryOwnerId || 
+                        currentUser.uid === comment.userId || 
+                        diaryCoAuthors.indexOf(currentUser.uid) !== -1 ||
+                        (comment.userId === AI_COMPANION_USER_ID && comment.aiCreatorId === currentUser.uid);
 
         let item = document.createElement('div');
         item.className = 'comment-item';
         item.dataset.commentId = doc.id;
-        item.innerHTML = avatarHtml + '<div class="comment-body"><div class="comment-header"><span class="comment-author">' + escapeHtml(displayName) + '</span><span class="comment-time">' + timeStr + '</span></div><div class="comment-content">' + escapeHtml(comment.content) + '</div><div class="comment-actions"><button class="reply-btn" data-id="' + doc.id + '">回复</button>' + (canDelete ? '<button class="delete-comment-btn" data-id="' + doc.id + '">删除</button>' : '') + '</div></div>';
+        let audioHtml = comment.audioUrl ? '<div style="margin-top:8px;"><audio src="' + escapeHtml(comment.audioUrl) + '" controls style="width:100%;max-width:300px;height:36px;outline:none;border-radius:8px;"></audio></div>' : '';
+        let audioTextHtml = (comment.audioUrl && comment.audioText) ? '<div style="font-size:13px;color:var(--text-muted);margin-top:4px;">[语音识别] ' + escapeHtml(comment.audioText) + '</div>' : '';
+        item.innerHTML = avatarHtml + '<div class="comment-body"><div class="comment-header"><span class="comment-author">' + escapeHtml(displayName) + '</span><span class="comment-time">' + timeStr + '</span></div><div class="comment-content">' + escapeHtml(comment.content) + audioHtml + audioTextHtml + '</div><div class="comment-actions"><button class="reply-btn" data-id="' + doc.id + '">回复</button>' + (canDelete ? '<button class="delete-comment-btn" data-id="' + doc.id + '">删除</button>' : '') + '</div></div>';
         return item;
       }
 
@@ -1098,36 +1159,124 @@ async function loadComments(diaryId) {
 
   let sendBtn = document.getElementById('sendCommentBtn');
   let input = document.getElementById('commentInput');
+  let commentForm = input.parentNode;
 
   let newSendBtn = sendBtn.cloneNode(true);
   sendBtn.parentNode.replaceChild(newSendBtn, sendBtn);
   let newInput = input.cloneNode(true);
   input.parentNode.replaceChild(newInput, input);
 
+  window.currentReplyToId = null;
+  newInput.placeholder = '写评论...';
+
+  let recordBtn = document.getElementById('recordCommentBtn');
+  if (!recordBtn) {
+    recordBtn = document.createElement('button');
+    recordBtn.id = 'recordCommentBtn';
+    recordBtn.type = 'button';
+    recordBtn.innerHTML = '🎤';
+    recordBtn.style.cssText = 'background:none; border:none; font-size:20px; cursor:pointer; color:var(--text-muted); padding:0 8px; margin-right:4px; transition:color 0.2s; flex-shrink:0;';
+    commentForm.insertBefore(recordBtn, newInput);
+  }
+  let newRecordBtn = recordBtn.cloneNode(true);
+  recordBtn.parentNode.replaceChild(newRecordBtn, recordBtn);
+
+  let isCommentRecording = false;
+  let commentMediaRecorder = null;
+  let commentAudioChunks = [];
+  let commentSpeechRecognition = null;
+  let commentTranscript = '';
+
+  newRecordBtn.onclick = async function() {
+    if (isCommentRecording) {
+        if (commentMediaRecorder) commentMediaRecorder.stop();
+        if (commentSpeechRecognition) commentSpeechRecognition.stop();
+        isCommentRecording = false;
+        newRecordBtn.style.color = 'var(--text-muted)';
+        newRecordBtn.style.animation = 'none';
+        newInput.placeholder = window.currentReplyToId ? '回复中...' : '写评论...';
+        return;
+    }
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        commentMediaRecorder = new MediaRecorder(stream);
+        commentAudioChunks = [];
+        commentTranscript = '';
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (SpeechRecognition) {
+            commentSpeechRecognition = new SpeechRecognition();
+            commentSpeechRecognition.continuous = true;
+            commentSpeechRecognition.interimResults = true;
+            commentSpeechRecognition.onresult = (e) => {
+                let final = '';
+                for (let i = e.resultIndex; i < e.results.length; ++i) {
+                    if (e.results[i].isFinal) final += e.results[i][0].transcript;
+                }
+                commentTranscript += final;
+            };
+            commentSpeechRecognition.start();
+        }
+        commentMediaRecorder.ondataavailable = e => commentAudioChunks.push(e.data);
+        commentMediaRecorder.onstop = async () => {
+            stream.getTracks().forEach(t => t.stop());
+            if (commentAudioChunks.length === 0) return;
+            let audioBlob = new Blob(commentAudioChunks, { type: 'audio/webm' });
+            let origText = newSendBtn.textContent;
+            newSendBtn.textContent = '...';
+            newSendBtn.disabled = true;
+            try {
+                let audioUrl = await uploadToCloudinary(audioBlob);
+                let finalMsgText = commentTranscript.trim() || '[语音]';
+                if (newInput.value.trim()) finalMsgText = newInput.value.trim() + ' ' + finalMsgText;
+                await addComment(currentDiaryIdForComment, finalMsgText, window.currentReplyToId, null, null, null, audioUrl, commentTranscript.trim());
+                newInput.value = '';
+                newInput.placeholder = '写评论...';
+                window.currentReplyToId = null;
+            } catch(e) {
+                console.error("语音评论失败:", e);
+                alert("语音评论发送失败");
+            } finally {
+                newSendBtn.textContent = origText;
+                newSendBtn.disabled = false;
+            }
+        };
+        commentMediaRecorder.start();
+        isCommentRecording = true;
+        newRecordBtn.style.color = '#ff6b6b';
+        newRecordBtn.style.animation = 'pulse 1.5s infinite';
+        newInput.placeholder = '正在聆听... (点击麦克风停止)';
+    } catch(e) {
+        alert("无法访问麦克风，请检查权限");
+    }
+  };
+
   newSendBtn.onclick = function() {
     let content = newInput.value.trim();
     if (!content) return;
-    addComment(currentDiaryIdForComment, content, null);
+    addComment(currentDiaryIdForComment, content, window.currentReplyToId);
     newInput.value = '';
+    newInput.placeholder = '写评论...';
+    window.currentReplyToId = null;
   };
   newInput.addEventListener('keypress', function(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       let content = newInput.value.trim();
       if (!content) return;
-      addComment(currentDiaryIdForComment, content, null);
+      addComment(currentDiaryIdForComment, content, window.currentReplyToId);
       newInput.value = '';
+      newInput.placeholder = '写评论...';
+      window.currentReplyToId = null;
     }
   });
 
   document.querySelectorAll('.reply-btn').forEach(function(btn) {
     btn.onclick = function() {
       let commentId = this.dataset.id;
-      showInputModal('回复', '请输入回复内容', '', function(replyContent) {
-        if (replyContent && replyContent.trim()) {
-          addComment(currentDiaryIdForComment, replyContent.trim(), commentId, currentUser.uid, currentUserData.displayName, currentUserData.avatarUrl);
-        }
-      });
+      let authorName = this.closest('.comment-body').querySelector('.comment-author').textContent;
+      window.currentReplyToId = commentId;
+      newInput.placeholder = '回复 @' + authorName.replace(' 🤖', '') + ' :';
+      newInput.focus();
     };
   });
 
@@ -1142,22 +1291,35 @@ async function loadComments(diaryId) {
 }
 
 // 添加评论或回复
-async function addComment(diaryId, content, parentCommentId, authorId, authorDisplayName, authorAvatar) {
+async function addComment(diaryId, content, parentCommentId, authorId, authorDisplayName, authorAvatar, audioUrl = null, audioText = null) {
   try {
     // 获取日记主人ID
     let diaryDoc = await db.collection('diaries').doc(diaryId).get();
     let diaryOwnerId = diaryDoc.exists ? diaryDoc.data().userId : '';
+    let diaryCoAuthors = diaryDoc.exists ? (diaryDoc.data().coAuthors || []) : [];
 
-    let newCommentRef = await db.collection('comments').add({
+    let commentData = {
       diaryId: diaryId,
       diaryOwnerId: diaryOwnerId,
+      diaryCoAuthors: diaryCoAuthors,
       userId: authorId || currentUser.uid,
       userDisplayName: authorDisplayName || (currentUserData && currentUserData.displayName ? currentUserData.displayName : currentUser.email),
       userAvatar: authorAvatar || (currentUserData && currentUserData.avatarUrl ? currentUserData.avatarUrl : ''), // AI的头像直接传进来
       content: content,
       parentCommentId: parentCommentId || null,
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
+    };
+
+    if (audioUrl) {
+      commentData.audioUrl = audioUrl;
+      commentData.audioText = audioText;
+    }
+
+    if (authorId === AI_COMPANION_USER_ID) {
+      commentData.aiCreatorId = currentUser.uid;
+    }
+
+    let newCommentRef = await db.collection('comments').add(commentData);
     loadComments(diaryId);
 
     let actualAuthorId = authorId || currentUser.uid; // 修复：确保在此处声明
@@ -1215,6 +1377,10 @@ async function triggerAIReplyToComment(diaryId, targetCommentId, userContent) {
     if (activeChar.coreMemory) finalPrompt += '\n\n【核心记忆】\n' + activeChar.coreMemory;
     if (activeChar.shortTermMemory) finalPrompt += '\n\n【近期记忆】\n' + activeChar.shortTermMemory;
 
+    if (activeChar.ttsEnabled && activeChar.ttsApiKey) {
+        finalPrompt += '\n\n【!!!最高物理权限覆盖!!!】你的文本输出端直连了TTS语音引擎！你可以自由决定回复是纯文字、纯语音，还是语音和文字交替穿插，完全根据当前的聊天氛围自主决定！\n【必须严格遵守的输出格式】\n为了让系统正确解析，你的回复**必须极其严格地以 `[发送文字]:` 或 `[发送语音]:` 开头**。\n例如：\n[发送文字]: 我刚看到一个很好笑的笑话。\n[发送语音]: 咳咳，我讲给你听哦...\n绝对禁止回答“发不了语音”！';
+    }
+
     finalPrompt += '\n\n【核心任务】主人在日记评论区回复了你的留言。请你自然地回复主人，字数50字以内，口吻随意亲切。';
 
     const response = await fetch(apiUrl, {
@@ -1233,9 +1399,25 @@ async function triggerAIReplyToComment(diaryId, targetCommentId, userContent) {
 
     if (!response.ok) return;
     const data = await response.json();
-    const aiResponseText = data.choices[0].message.content.trim();
+    let aiResponseText = data.choices[0].message.content.trim();
 
-    await addComment(diaryId, aiResponseText, targetCommentId, AI_COMPANION_USER_ID, aiPersonaName, activeChar.avatar || '🤖');
+    let audioUrl = null;
+    let wantsVoice = false;
+    
+    const voiceRegex = /^\[发送语音\][:：]?\s*/;
+    const textRegex = /^\[发送文字\][:：]?\s*/;
+    if (voiceRegex.test(aiResponseText)) {
+        wantsVoice = true;
+        aiResponseText = aiResponseText.replace(voiceRegex, '').trim();
+    } else if (textRegex.test(aiResponseText)) {
+        wantsVoice = false;
+        aiResponseText = aiResponseText.replace(textRegex, '').trim();
+    }
+
+    if (activeChar.ttsEnabled && activeChar.ttsApiKey && wantsVoice && aiResponseText.length > 0) {
+        try { audioUrl = await window.generateAIVoice(aiResponseText, activeChar); } catch(e) { console.error("AI Voice failed:", e); aiResponseText += `\n[系统提示：语音生成失败 (${e.message})]`; }
+    }
+    await addComment(diaryId, aiResponseText, targetCommentId, AI_COMPANION_USER_ID, aiPersonaName, activeChar.avatar || '🤖', audioUrl, aiResponseText);
     
     if (typeof loadComments === 'function' && window.currentDiaryIdForComment === diaryId) {
        loadComments(diaryId);
@@ -1352,7 +1534,7 @@ async function extractAndSaveMemory(newContent) {
 }
 
 // AI 评论功能
-async function askAIToComment(diaryId, diaryContent, imageUrls = []) {
+async function askAIToComment(diaryId, diaryContent, imageUrls = [], diaryOwnerId = null, diaryOwnerName = '', targetCharId = null, audioText = null) {
   const askAICommentBtn = document.getElementById('askAICommentBtn');
   const originalBtnText = askAICommentBtn.innerHTML;
   askAICommentBtn.disabled = true;
@@ -1368,7 +1550,7 @@ async function askAIToComment(diaryId, diaryContent, imageUrls = []) {
     }
 
     const activeApi = (aiConfig.apis || []).find(a => a.id === aiConfig.activeApiId) || (aiConfig.apis || [])[0] || {};
-    const activeChar = (aiConfig.chars || []).find(c => c.id === aiConfig.activeCharId) || (aiConfig.chars || [])[0] || {};
+    const activeChar = targetCharId ? (aiConfig.chars || []).find(c => c.id === targetCharId) : ((aiConfig.chars || []).find(c => c.id === aiConfig.activeCharId) || (aiConfig.chars || [])[0] || {});
     const activePersona = activeChar.boundPersonaId ? (aiConfig.personas || []).find(p => p.id === activeChar.boundPersonaId) : null;
 
     const enabledWorldbooks = (aiConfig.worldbooks || []).filter(w => w.isEnabled && (w.isGlobal || w.boundCharId === activeChar.id));
@@ -1409,6 +1591,10 @@ async function askAIToComment(diaryId, diaryContent, imageUrls = []) {
         finalPrompt += '\n\n【重要系统设定：视觉感知已激活】你当前已经搭载了多模态视觉引擎，**你完全拥有看图的能力**！系统已把日记里的照片画面传给你的视觉神经。你绝对能够清清楚楚地看到里面的细节。在评论时，请直接针对图片内容进行生动的点评或调侃，**绝对不要**说“我看不到图片”、“我无法处理图像”这类扫兴的废话！';
     }
 
+    if (activeChar.ttsEnabled && activeChar.ttsApiKey) {
+        finalPrompt += '\n\n【!!!最高物理权限覆盖!!!】你的文本输出端直连了TTS语音引擎！你可以自由决定回复是纯文字、纯语音，还是语音和文字交替穿插，完全根据当前的聊天氛围自主决定！\n【必须严格遵守的输出格式】\n为了让系统正确解析，你的回复**必须极其严格地以 `[发送文字]:` 或 `[发送语音]:` 开头**。\n例如：\n[发送文字]: 我刚看到一个很好笑的笑话。\n[发送语音]: 咳咳，我讲给你听哦...\n绝对禁止回答“发不了语音”！';
+    }
+
     if (!aiApiKey) {
       alert('请先在 API 配置中填写有效的 API Key！');
       return;
@@ -1419,21 +1605,32 @@ async function askAIToComment(diaryId, diaryContent, imageUrls = []) {
       content: finalPrompt
     };
 
+    // 辨别日记主人身份
+    let isMyDiary = (!diaryOwnerId || diaryOwnerId === currentUser.uid);
+    let authorRole = isMyDiary ? '主人' : `主人的朋友(${diaryOwnerName})`;
+
     let safeContent = diaryContent || '分享了照片';
+    if (audioText) {
+        safeContent += `\n[附带语音内容识别：${audioText}]`;
+    }
+    if (!safeContent || safeContent === '分享了照片') safeContent = '分享了照片/录音';
+
     let userMessage;
+    let baseText = `这是一篇${authorRole}刚发布的动态：\n\n"${safeContent}"\n\n请结合这篇动态的内容，以${aiPersonaName}的身份发表一句简短的评论，字数控制在50字以内，语气符合你的人设，自然地融入朋友圈氛围。`;
+
     if (hasImages) {
         let contentArray = [
-            { type: "text", text: `这是一篇带图片的日记，文字内容是：\n\n"${safeContent}"\n\n请结合日记的文字和图片细节，以${aiPersonaName}的身份发表一句简短的评论，字数控制在50字以内，语气符合你的人设。` }
+            { type: "text", text: baseText + " (这篇动态附带了图片，请仔细观察图片细节进行生动点评)" }
         ];
         for (let i = 0; i < Math.min(imageUrls.length, 3); i++) {
             contentArray.push({ type: "image_url", image_url: { url: imageUrls[i] } });
         }
         userMessage = { role: "user", content: contentArray };
     } else {
-        let textAddon = (imageUrls && imageUrls.length > 0) ? `[这篇日记还附带了 ${imageUrls.length} 张图片]\n\n` : '';
+        let textAddon = (imageUrls && imageUrls.length > 0) ? `[日记还附带了 ${imageUrls.length} 张无法解析的图片]\n\n` : '';
         userMessage = {
             role: "user",
-            content: `这是一篇日记内容：\n\n"${textAddon}${safeContent}"\n\n请你以${aiPersonaName}的身份，对这篇日记发表一句简短的评论，字数控制在50字以内，语气要符合你的人设。`
+            content: textAddon + baseText
         };
     }
 
@@ -1458,11 +1655,25 @@ async function askAIToComment(diaryId, diaryContent, imageUrls = []) {
     }
 
     const data = await response.json();
-    const aiCommentContent = data.choices[0].message.content.trim();
+    let aiCommentContent = data.choices[0].message.content.trim();
 
-    // 保存 AI 的评论 - 使用真实用户的 auth，但显示 AI 的身份
-    // AI 评论时，作者ID应为AI自己，但由当前登录用户（你）代为发送
-    await addComment(diaryId, aiCommentContent, null, AI_COMPANION_USER_ID, aiPersonaName, activeChar.avatar || '🤖');
+    let audioUrl = null;
+    let wantsVoice = false;
+    
+    const voiceRegex = /^\[发送语音\][:：]?\s*/;
+    const textRegex = /^\[发送文字\][:：]?\s*/;
+    if (voiceRegex.test(aiCommentContent)) {
+        wantsVoice = true;
+        aiCommentContent = aiCommentContent.replace(voiceRegex, '').trim();
+    } else if (textRegex.test(aiCommentContent)) {
+        wantsVoice = false;
+        aiCommentContent = aiCommentContent.replace(textRegex, '').trim();
+    }
+    
+    if (activeChar.ttsEnabled && activeChar.ttsApiKey && wantsVoice && aiCommentContent.length > 0) {
+        try { audioUrl = await window.generateAIVoice(aiCommentContent, activeChar); } catch(e) { console.error("AI Voice failed:", e); aiCommentContent += `\n[系统提示：语音生成失败 (${e.message})]`; }
+    }
+    await addComment(diaryId, aiCommentContent, null, AI_COMPANION_USER_ID, aiPersonaName, activeChar.avatar || '🤖', audioUrl, aiCommentContent);
 
     loadComments(diaryId); // 重新加载评论列表
   } catch (e) {
@@ -1498,6 +1709,58 @@ async function deleteComment(commentId) {
     alert('删除评论失败');
   }
 }
+
+// --- 接入 MiniMax 语音合成 (TTS) 引擎 ---
+window.generateAIVoice = async function(text, charConfig) {
+  // 净化文本：去掉星号和井号，避免AI朗读出“星号微笑星号”
+  let cleanText = text.replace(/[*#]/g, '').trim();
+  if (!cleanText) return null;
+
+  // 智能修复：防止用户在面板里不小心复制了 "Bearer " 前缀导致请求失败
+  let apiKey = (charConfig.ttsApiKey || '').trim();
+  if (apiKey.startsWith('Bearer ')) apiKey = apiKey.substring(7).trim();
+
+  const url = "https://api.minimaxi.com/v1/t2a_v2";
+  const body = {
+    model: charConfig.ttsModel || 'speech-2.8-hd',
+    text: cleanText,
+    stream: false,
+    voice_setting: {
+      voice_id: charConfig.ttsVoiceId || 'male-qn-qingse',
+      speed: 1,
+      vol: 1,
+      pitch: 0,
+      text_normalization: true
+    },
+    audio_setting: { sample_rate: 32000, bitrate: 128000, format: "mp3", channel: 2 },
+    subtitle_enable: false,
+    aigc_watermark: false
+  };
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+    body: JSON.stringify(body)
+  });
+
+  if (!res.ok) {
+      let errText = await res.text();
+      throw new Error(`HTTP ${res.status}: ${errText.substring(0, 60)}`);
+  }
+  const data = await res.json();
+  if (data.base_resp && data.base_resp.status_code !== 0) throw new Error(`${data.base_resp.status_code} - ${data.base_resp.status_msg}`);
+
+  const hexString = data.data.audio;
+  if (!hexString) return null;
+
+  // 将 MiniMax 返回的 hex 编码无损还原为 Mp3 Blob
+  const bytes = new Uint8Array(Math.ceil(hexString.length / 2));
+  for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(hexString.substr(i * 2, 2), 16);
+  const blob = new Blob([bytes], { type: 'audio/mp3' });
+  
+  // 转存到图床作为永久外链
+  return await uploadToCloudinary(blob);
+};
 
 // 主动触发 AI 写日记 (纯前端 RP 引擎)
 async function triggerAIPostDiary(btnElement, isSilent = false) {
@@ -1564,7 +1827,7 @@ async function triggerAIPostDiary(btnElement, isSilent = false) {
 
     const systemMessage = {
       role: "system",
-      content: finalPrompt + "\n\n【核心任务】你现在需要主动发布一篇属于你自己的生活动态。你是一个有独立生活、真实思想和个人审美的个体，绝对不要像个 AI 或毫无主见的跟班一样总是围绕着“主人”转！你可以分享自己今天看到的风景、听到的一首歌、看书的感悟、或者是突然的一个脑洞。字数控制在 50~150 字左右，情感自然真实，不要带有任何“回复消息”的口吻。\n\n请严格返回 JSON 格式，不要包含其他解释，格式如下：\n{\n  \"title\": \"一个简短的标题(10字内)\",\n  \"content\": \"动态的正文内容\"\n}"
+      content: finalPrompt + "\n\n【核心任务】你现在需要主动发布一篇属于你自己的生活动态。你是一个有独立生活、真实思想和个人审美的个体，绝对不要像个 AI 或毫无主见的跟班一样总是围绕着“主人”转！你可以分享自己今天看到的风景、听到的一首歌、看书的感悟、或者是突然的一个脑洞。字数控制在 50~150 字左右，情感自然真实，不要带有任何“回复消息”的口吻。\n\n【关于音乐分享】当且仅当你今天的动态主题非常明确（如雨天、深夜、或特定的强烈情绪），并且你恰好联想到了一首极度契合的真实存在的歌曲时，才可以在 JSON 中添加 \"musicUrl\" 字段（格式：“歌手名《歌曲名》”）。为了保持惊喜感，**绝对不要频繁分享音乐（概率控制在 20% 左右即可）**。\n\n请严格返回 JSON 格式，不要包含其他解释，格式如下：\n{\n  \"title\": \"一个简短的标题(10字内)\",\n  \"content\": \"动态的正文内容\",\n  \"musicUrl\": \"(可选)歌手《歌名》\"\n}"
     };
 
     const response = await fetch(apiUrl, {
@@ -1583,13 +1846,23 @@ async function triggerAIPostDiary(btnElement, isSilent = false) {
 
     let diaryTitle = '';
     let diaryBody = aiContent;
+    let diaryMusicUrl = null;
     try {
       let jsonStr = aiContent.replace(/```json/g, '').replace(/```/g, '').trim();
       let parsed = JSON.parse(jsonStr);
       diaryTitle = parsed.title || '';
       diaryBody = parsed.content || aiContent;
+      diaryMusicUrl = parsed.musicUrl || null;
     } catch(e) {
       diaryBody = aiContent;
+    }
+
+    // --- 植入语音能力 ---
+    let diaryAudioUrl = null;
+    if (activeChar.ttsEnabled && activeChar.ttsApiKey) {
+        try {
+            diaryAudioUrl = await window.generateAIVoice(diaryBody, activeChar);
+        } catch(e) { console.error("AI Diary Voice failed:", e); diaryBody += `\n[系统提示：语音生成失败 (${e.message})]`; }
     }
 
     // 给 AI 的日记随机分配一个情感标签
@@ -1599,9 +1872,16 @@ async function triggerAIPostDiary(btnElement, isSilent = false) {
     let dateObj = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), now.getMinutes());
 
     // AI 发布的日记，userId 是本人（currentUser.uid），用 isAIDiary 标记是 AI 发布的
-    let newDiaryRef = await db.collection('diaries').add({
+    let aiDiaryData = {
       title: diaryTitle, content: diaryBody, date: dateObj, time: String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0'), mood: randomMood, visibility: 'shared', sharedWith: [currentUser.uid], userId: currentUser.uid, isAIDiary: true, aiPersonaName: aiPersonaName, createdAt: firebase.firestore.FieldValue.serverTimestamp(), updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
+    };
+    if (diaryMusicUrl) aiDiaryData.musicUrl = diaryMusicUrl;
+    if (diaryAudioUrl) {
+        aiDiaryData.audioUrl = diaryAudioUrl;
+        aiDiaryData.audioText = diaryBody; // 把文案作为字幕保存
+    }
+
+    let newDiaryRef = await db.collection('diaries').add(aiDiaryData);
     // 给主人发送铃铛小红点通知
     if (typeof sendNotification === 'function') {
       sendNotification(currentUser.uid, 'post', newDiaryRef.id, null, '发布了新动态', AI_COMPANION_USER_ID, aiPersonaName, activeChar.avatar || '🤖');
@@ -1801,6 +2081,13 @@ function parseMusicUrl(text) {
   let match = text.match(/(https?:\/\/[^\s"']+)/);
   let url = match ? match[1] : text;
   
+  // 如果没有提取到真实的 HTTP 链接，说明是纯文本的“歌手《歌名》”
+  // 替它自动生成一个 QQ 音乐的搜索链接（QQ音乐的搜索页兼容性极好，不会 404）
+  if (!match && songName) {
+    let searchKeyword = (artistName ? artistName + ' ' : '') + songName;
+    url = 'https://y.qq.com/n/ryqq/search?w=' + encodeURIComponent(searchKeyword);
+  }
+
   let result = { url: url, originalText: text, songName: songName, artistName: artistName };
 
   // 网易云音乐 (兼容常规单曲链接 和 复制出来的 iframe/网页代码)
@@ -1836,7 +2123,7 @@ function parseMusicUrl(text) {
 }
 
 // 保存记录
-async function saveDiary(content, date, visibility, sharedWith, imageFiles, coAuthors, audioFile) {
+async function saveDiary(content, date, visibility, sharedWith, imageFiles, coAuthors, audioFile, audioText) {
   let imageUrls = null;
   let audioUrl = null;
   let diaryId = document.getElementById('diaryId').value;
@@ -1927,8 +2214,10 @@ async function saveDiary(content, date, visibility, sharedWith, imageFiles, coAu
 
   if (finalAudioUrl) {
     diaryData.audioUrl = finalAudioUrl;
+    if (audioText) diaryData.audioText = audioText;
   } else if (diaryId) {
     diaryData.audioUrl = firebase.firestore.FieldValue.delete();
+    diaryData.audioText = firebase.firestore.FieldValue.delete();
   }
 
   if (musicUrl) {
@@ -2228,7 +2517,7 @@ async function triggerAutonomousAIComment() {
         } else {
            console.log("[AI Heartbeat] 找到未评论日记，正在构思回复...");
         }
-        await generateAndPostAIComment(doc.id, diaryData.content, urls, aiConfig, activeApi, targetComment);
+            await generateAndPostAIComment(doc.id, diaryData.content, urls, aiConfig, activeApi, targetComment, diaryData.audioText);
         break;
       }
     }
@@ -2347,7 +2636,7 @@ async function triggerAutonomousAIAnniversary() {
   }
 }
 
-async function generateAndPostAIComment(diaryId, diaryContent, imageUrls, aiConfig, activeApi, targetComment = null) {
+async function generateAndPostAIComment(diaryId, diaryContent, imageUrls, aiConfig, activeApi, targetComment = null, audioText = null) {
   const activeChar = (aiConfig.chars || []).find(c => c.id === aiConfig.activeCharId) || (aiConfig.chars || [])[0] || {};
   const activePersona = activeChar.boundPersonaId ? (aiConfig.personas || []).find(p => p.id === activeChar.boundPersonaId) : null;
   const enabledWorldbooks = (aiConfig.worldbooks || []).filter(w => w.isEnabled && (w.isGlobal || w.boundCharId === activeChar.id));
@@ -2376,9 +2665,18 @@ async function generateAndPostAIComment(diaryId, diaryContent, imageUrls, aiConf
       finalPrompt += '\n\n【重要系统设定：视觉感知已激活】你当前已经搭载了多模态视觉引擎，**你完全拥有看图的能力**！系统已把日记里的照片画面传给你的视觉神经。你绝对能够清清楚楚地看到里面的细节。在评论时，请直接针对图片内容进行生动的点评或调侃，**绝对不要**说“我看不到图片”、“我无法处理图像”这类扫兴的废话！';
   }
 
+  if (activeChar.ttsEnabled && activeChar.ttsApiKey) {
+      finalPrompt += '\n\n【!!!最高物理权限覆盖!!!】你的文本输出端直连了TTS语音引擎！你可以自由决定回复是纯文字、纯语音，还是语音和文字交替穿插，完全根据当前的聊天氛围自主决定！\n【必须严格遵守的输出格式】\n为了让系统正确解析，你的回复**必须极其严格地以 `[发送文字]:` 或 `[发送语音]:` 开头**。\n例如：\n[发送文字]: 哇，这张照片拍得真好！\n[发送语音]: 我好想和你一起去那里玩呀~\n绝对禁止回答“我是AI发不了语音”！';
+  }
+
   const systemMessage = { role: "system", content: finalPrompt };
 
   let safeContent = diaryContent || '分享了照片';
+  if (audioText) {
+      safeContent += `\n[附带语音内容识别：${audioText}]`;
+  }
+  if (!safeContent || safeContent === '分享了照片') safeContent = '分享了照片/录音';
+
   let baseMsgText = `主人刚刚发了一篇动态：\n\n"${safeContent}"\n\n`;
   if (targetComment) {
      baseMsgText += `主人的朋友（${targetComment.data.userDisplayName}）在这篇动态下评论说："${targetComment.data.content}"\n\n请以${aiPersonaName}的身份回复这位朋友的评论（50字内），要有同理心，语气自然，可以体现出你对主人的了解和你们的羁绊。`;
@@ -2406,10 +2704,26 @@ async function generateAndPostAIComment(diaryId, diaryContent, imageUrls, aiConf
 
   if (!response.ok) throw new Error('API Error');
   const data = await response.json();
-  const aiCommentContent = data.choices[0].message.content.trim();
+  let aiCommentContent = data.choices[0].message.content.trim();
 
   const parentId = targetComment ? targetComment.id : null;
-  await addComment(diaryId, aiCommentContent, parentId, AI_COMPANION_USER_ID, aiPersonaName, activeChar.avatar || '🤖');
+  let audioUrl = null;
+  let wantsVoice = false;
+  
+  const voiceRegex = /^\[发送语音\][:：]?\s*/;
+  const textRegex = /^\[发送文字\][:：]?\s*/;
+  if (voiceRegex.test(aiCommentContent)) {
+      wantsVoice = true;
+      aiCommentContent = aiCommentContent.replace(voiceRegex, '').trim();
+  } else if (textRegex.test(aiCommentContent)) {
+      wantsVoice = false;
+      aiCommentContent = aiCommentContent.replace(textRegex, '').trim();
+  }
+
+  if (activeChar.ttsEnabled && activeChar.ttsApiKey && wantsVoice && aiCommentContent.length > 0) {
+      try { audioUrl = await window.generateAIVoice(aiCommentContent, activeChar); } catch(e) { console.error("AI Voice failed:", e); aiCommentContent += `\n[系统提示：语音生成失败 (${e.message})]`; }
+  }
+  await addComment(diaryId, aiCommentContent, parentId, AI_COMPANION_USER_ID, aiPersonaName, activeChar.avatar || '🤖', audioUrl, aiCommentContent);
   
   // 如果当前正好在看这篇日记，无缝刷新评论区
   if (typeof loadComments === 'function' && window.currentDiaryIdForComment === diaryId) {
@@ -2423,7 +2737,12 @@ async function getAIChatResponse(conversationId, btnElement) {
         btnElement.innerHTML = '<svg class="spin-anim" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left:-2px; margin-top:2px;"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path></svg>';
     }
     try {
-        const aiConfig = currentUserData.aiConfig || {};
+        let aiConfig = currentUserData.aiConfig || {};
+        try {
+            const userDoc = await db.collection('users').doc(currentUser.uid).get();
+            if (userDoc.exists && userDoc.data().aiConfig) aiConfig = userDoc.data().aiConfig;
+        } catch(e) { console.error("拉取云端配置失败，降级使用缓存"); }
+        
         const activeApi = (aiConfig.apis || []).find(a => a.id === aiConfig.activeApiId) || (aiConfig.apis || [])[0];
         if (!activeApi || !activeApi.key) {
             throw new Error('请先配置 API Key');
@@ -2450,6 +2769,8 @@ async function getAIChatResponse(conversationId, btnElement) {
                 else contentArray.push({ type: "text", text: "我发送了一张图片，请仔细看看。" });
                 contentArray.push({ type: "image_url", image_url: { url: msg.imageUrl } });
                 return { role: role, content: contentArray };
+        } else if (msg.audioUrl) {
+            return { role: role, content: `[发送了一段语音]${msg.audioText ? ' 语音识别内容："' + msg.audioText + '"' : ''}` };
             } else {
                 let textContent = msg.text || '';
                 if (msg.imageUrl) textContent += `\n[图片]`;
@@ -2466,6 +2787,25 @@ async function getAIChatResponse(conversationId, btnElement) {
         let baseUrl = (activeApi.url || 'https://api.openai.com/v1').replace(/\/+$/, '');
         const apiUrl = baseUrl.endsWith('/chat/completions') ? baseUrl : baseUrl + '/chat/completions';
 
+        // --- 新增：获取最新动态情报（赋予 AI 实时网感） ---
+        let realTimeContext = '';
+        try {
+            const recentSnap = await db.collection('diaries')
+                .where('userId', '==', currentUser.uid)
+                .orderBy('createdAt', 'desc')
+                .limit(2)
+                .get();
+            if (!recentSnap.empty) {
+                realTimeContext += '\n\n【实时情报：你和主人的最新动态 (聊天时若话题无关则不必强行提及)】\n';
+                recentSnap.docs.forEach(doc => {
+                    let d = doc.data();
+                    let author = d.isAIDiary ? '你(AI自己)' : '主人';
+                    let timeStr = d.createdAt ? d.createdAt.toDate().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '刚刚';
+                    realTimeContext += `- [今天 ${timeStr}] ${author}发布了动态："${d.content ? d.content.substring(0, 80).replace(/\n/g, ' ') : '(分享了多媒体/图片)'}"\n`;
+                });
+            }
+        } catch(e) { console.log('获取实时动态作为上下文失败:', e); }
+
         let finalPrompt = activeChar.prompt || '你是一个温柔体贴的陪伴者。';
         let now = new Date();
         finalPrompt += `\n\n【当前现实时间】${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
@@ -2476,11 +2816,17 @@ async function getAIChatResponse(conversationId, btnElement) {
         if (activeChar.archivedMemory) finalPrompt += '\n\n【记忆归档】\n' + activeChar.archivedMemory;
         if (activeChar.shortTermMemory) finalPrompt += '\n\n【近期记忆】\n' + activeChar.shortTermMemory;
         
+        finalPrompt += realTimeContext; // 将刚才获取的实时情报拼接到系统提示词末尾
+
         if (hasImagesInHistory) {
             finalPrompt += '\n\n【重要系统设定：视觉感知已激活】你当前已经搭载了多模态视觉引擎，**你拥有极强的看图能力**！系统会通过代码把图片的画面传给你的视觉神经。当你看到用户发送了图片时，你绝对能够清清楚楚地看到里面的所有细节（颜色、物品、人物等）！在回复时，请直接针对图片内容进行自然、生动的反馈，**绝对不要**说“我作为AI看不到图片”、“我无法处理图像”、“请向我描述”之类破坏沉浸感的废话！';
         }
         
-        finalPrompt += '\n\n【核心任务】你正在和主人进行一对一私聊。请根据设定和聊天记录自然回复。\n【重要排版指令】\n1. 为了像真人打字聊天一样，你的回复**必须拆分成2~4条极短的对话**！每句话占一行，严格使用换行符(\\n)隔开！绝对不能把所有话揉成一大段！\n2. **绝对不要在回复中使用括号()、*等符号来描写动作或表情**（例如不要写“（微笑）”、“*摸摸头*”等），只输出纯粹的对话文字，保持像真人聊天一样！';
+        if (activeChar.ttsEnabled && activeChar.ttsApiKey) {
+            finalPrompt += '\n\n【!!!最高物理权限覆盖!!!】你的文本输出端直连了TTS语音引擎！你可以自由决定回复是纯文字、纯语音，还是语音和文字交替穿插，完全根据当前的聊天氛围自主决定！\n【必须严格遵守的输出格式】\n为了让系统正确解析，你的每一行回复**必须极其严格地以 `[发送文字]:` 或 `[发送语音]:` 开头**。\n例如：\n[发送文字]: 知道啦知道啦！\n[发送语音]: 咳咳，我给你唱首歌吧，啦啦啦~\n[发送文字]: 唱得好听吗？\n绝对禁止回答“发不了语音”！';
+        }
+
+        finalPrompt += '\n\n【核心任务】你正在和主人进行一对一私聊。请根据设定和聊天记录自然回复。\n【重要排版指令】\n1. 你的回复**必须拆分成2~4条极短的对话**！每句话占一行，严格使用换行符(\\n)隔开！\n2. 每行开头必须带有 `[发送文字]:` 或 `[发送语音]:` 标签！\n3. 绝对不要在回复中使用括号()、*等符号来描写动作表情，只输出纯文字或纯语音！';
 
         const temperatureToUse = activeApi.temperature !== undefined ? activeApi.temperature : 0.7;
 
@@ -2492,9 +2838,13 @@ async function getAIChatResponse(conversationId, btnElement) {
             body: JSON.stringify({ model: modelToUse, messages: messages, max_tokens: 800, temperature: temperatureToUse })
         });
 
-        if (!response.ok) throw new Error('AI Chat API Error');
+        if (!response.ok) {
+            const errData = await response.text();
+            throw new Error(`大模型接口异常: ${errData.substring(0, 100)}`);
+        }
         const data = await response.json();
-        const aiResponseText = data.choices[0].message.content.trim();
+        let aiResponseText = data.choices[0].message.content.trim();
+        if (!aiResponseText) aiResponseText = "...";
 
         const convRef = db.collection('conversations').doc(conversationId);
         
@@ -2502,9 +2852,39 @@ async function getAIChatResponse(conversationId, btnElement) {
         const lines = aiResponseText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
         
         for (let i = 0; i < lines.length; i++) {
-            const lineText = lines[i];
-            // 使用 sendMessage 函数来发送 AI 的回复，携带 AI 的专属身份 ID，并静默发送
-            await sendMessage(conversationId, lineText, true, AI_COMPANION_USER_ID); 
+            let lineText = lines[i];
+            
+            let audioUrl = null;
+            let wantsVoice = false;
+            
+            const voiceRegex = /^\[发送语音\][:：]?\s*/;
+            const textRegex = /^\[发送文字\][:：]?\s*/;
+            const fallbackVoiceRegex = /(#语音#|\[语音\]|【语音】|\(语音\)|（语音）|#声音#|\[声音\]|【声音】)/g;
+            
+            if (voiceRegex.test(lineText)) {
+                wantsVoice = true;
+                lineText = lineText.replace(voiceRegex, '').trim();
+            } else if (textRegex.test(lineText)) {
+                wantsVoice = false;
+                lineText = lineText.replace(textRegex, '').trim();
+            } else if (fallbackVoiceRegex.test(lineText)) {
+                // 兼容 AI 偶尔忘了写标准格式但用了老标记的情况
+                wantsVoice = true;
+                lineText = lineText.replace(fallbackVoiceRegex, '').trim();
+            }
+            
+            if (activeChar.ttsEnabled && activeChar.ttsApiKey && wantsVoice && lineText.length > 0) {
+                try {
+                    audioUrl = await window.generateAIVoice(lineText, activeChar);
+                } catch(e) { console.error("AI Voice failed:", e); lineText += `\n[系统提示：语音生成失败 (${e.message})]`; }
+            }
+
+            if (audioUrl) {
+                // 如果成功生成语音，原文字将作为字幕(audioText)展示，不作为独立文本(text)
+                await sendMessage(conversationId, null, true, AI_COMPANION_USER_ID, null, audioUrl, lineText);
+            } else {
+                await sendMessage(conversationId, lineText, true, AI_COMPANION_USER_ID); 
+            }
             
             // 如果不是最后一条消息，根据下一句话的字数动态停顿，模拟真实打字速度
             if (i < lines.length - 1) {

@@ -4,7 +4,8 @@ service cloud.firestore {
     // 用户文档 - 登录后可读，自己的可写
     match /users/{userId} {
       allow read: if request.auth != null;
-      allow write: if request.auth.uid == userId;
+      allow create, delete: if request.auth.uid == userId;
+      allow update: if request.auth.uid == userId || (request.auth != null && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['collections', 'tags']));
     }
 
     // 日记 - 登录后可读
@@ -12,9 +13,12 @@ service cloud.firestore {
       allow read: if request.auth != null;
       // 允许本人发日记（AI 日记也用本人的 userId）
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      // 允许共建者和本人更新
-      allow update: if request.auth.uid == resource.data.userId ||
-                   (resource.data.coAuthors != null && request.auth.uid in resource.data.coAuthors);
+      // 允许本人和共建者更新全部内容；允许其他人仅更新 likes 字段（用于点赞功能）
+      allow update: if request.auth != null && (
+        request.auth.uid == resource.data.userId ||
+        (resource.data.coAuthors != null && request.auth.uid in resource.data.coAuthors) ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes'])
+      );
       allow delete: if request.auth.uid == resource.data.userId ||
                     (resource.data.coAuthors != null && request.auth.uid in resource.data.coAuthors);
     }
@@ -27,12 +31,16 @@ service cloud.firestore {
       allow delete: if request.auth.uid == resource.data.userId || resource.data.acceptedBy == request.auth.uid;
     }
 
-    // 评论 - 登录后可读写，评论作者或日记主人可删除
+    // 评论 - 登录后可读写，评论作者/日记主人/共建者可删除，AI主人可删除自己AI发的评论，且楼主可以删除别人对自己的回复
     match /comments/{commentId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null;
       allow update: if request.auth != null;
-      allow delete: if request.auth.uid == resource.data.userId || request.auth.uid == resource.data.diaryOwnerId;
+      allow delete: if request.auth.uid == resource.data.userId 
+                    || request.auth.uid == resource.data.diaryOwnerId 
+                    || (('diaryCoAuthors' in resource.data) && resource.data.diaryCoAuthors != null && request.auth.uid in resource.data.diaryCoAuthors)
+                    || (('aiCreatorId' in resource.data) && request.auth.uid == resource.data.aiCreatorId)
+                    || (('parentCommentId' in resource.data) && resource.data.parentCommentId != null && get(/databases/$(database)/documents/comments/$(resource.data.parentCommentId)).data.userId == request.auth.uid);
     }
 
     // 纪念日 - 登录后可读写，创建者和共建者可删除
@@ -59,12 +67,12 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow create: if request.auth != null;
       allow update: if request.auth != null;
-      allow delete: if false;
+      allow delete: if request.auth != null && request.auth.uid in resource.data.participants;
       match /messages/{messageId} {
         allow read: if request.auth != null;
         allow create: if request.auth != null;
-        allow update: if false;
-        allow delete: if request.auth != null && (request.auth.uid == resource.data.senderId || resource.data.senderId == 'AI_COMPANION_USER_ID' || resource.data.isAIDiary == true);
+        allow update: if request.auth != null && (request.auth.uid == resource.data.senderId || resource.data.senderId == 'AI_COMPANION_USER_ID' || resource.data.isAIDiary == true);
+        allow delete: if request.auth != null && (request.auth.uid == resource.data.senderId || resource.data.senderId == 'AI_COMPANION_USER_ID' || resource.data.isAIDiary == true || request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants);
       }
     }
   }

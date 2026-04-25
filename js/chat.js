@@ -46,6 +46,88 @@ function setupChat() {
         });
     }
 
+    // 新增：动态注入私聊语音按钮及录音逻辑
+    if (chatImageBtn && !document.getElementById('chatRecordBtn')) {
+        const chatRecordBtn = document.createElement('button');
+        chatRecordBtn.id = 'chatRecordBtn';
+        chatRecordBtn.type = 'button';
+        chatRecordBtn.innerHTML = '🎤';
+        chatRecordBtn.title = '点击开始/停止录音';
+        chatRecordBtn.style.cssText = 'background:none; border:none; font-size:18px; cursor:pointer; color:var(--text-muted); padding:0 8px; transition:color 0.2s; display:flex; align-items:center;';
+        chatImageBtn.parentNode.insertBefore(chatRecordBtn, chatImageBtn.nextSibling);
+
+        let chatMediaRecorder = null;
+        let chatAudioChunks = [];
+        let chatSpeechRecognition = null;
+        let chatTranscript = '';
+        let isChatRecording = false;
+
+        chatRecordBtn.addEventListener('click', async () => {
+            if (isChatRecording) {
+                chatMediaRecorder.stop();
+                if (chatSpeechRecognition) chatSpeechRecognition.stop();
+                isChatRecording = false;
+                chatRecordBtn.style.color = 'var(--text-muted)';
+                chatRecordBtn.style.animation = 'none';
+                document.getElementById('chatMessageInput').placeholder = '输入消息...';
+                return;
+            }
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                chatMediaRecorder = new MediaRecorder(stream);
+                chatAudioChunks = [];
+                chatTranscript = '';
+
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                if (SpeechRecognition) {
+                    chatSpeechRecognition = new SpeechRecognition();
+                    chatSpeechRecognition.continuous = true;
+                    chatSpeechRecognition.interimResults = true;
+                    chatSpeechRecognition.onresult = (e) => {
+                        let final = '';
+                        for (let i = e.resultIndex; i < e.results.length; ++i) {
+                            if (e.results[i].isFinal) final += e.results[i][0].transcript;
+                        }
+                        chatTranscript += final;
+                    };
+                    chatSpeechRecognition.start();
+                }
+
+                chatMediaRecorder.ondataavailable = e => chatAudioChunks.push(e.data);
+                chatMediaRecorder.onstop = async () => {
+                    stream.getTracks().forEach(track => track.stop());
+                    if (chatAudioChunks.length === 0) return;
+                    
+                    const audioBlob = new Blob(chatAudioChunks, { type: 'audio/webm' });
+                    const sendBtn = document.getElementById('sendChatMessageBtn');
+                    const origText = sendBtn.textContent;
+                    sendBtn.textContent = '⬆️';
+                    sendBtn.disabled = true;
+                    
+                    try {
+                        const audioUrl = await uploadToCloudinary(audioBlob);
+                        let finalMsgText = chatTranscript.trim() || '[语音消息]';
+                        // 发送带有语音链接和识别文本的消息
+                        await sendMessage(currentConversationId, finalMsgText, false, null, null, audioUrl, chatTranscript.trim());
+                    } catch(e) { 
+                        console.error(e); alert("语音发送失败"); 
+                    } finally { 
+                        sendBtn.textContent = origText; sendBtn.disabled = false; 
+                        document.getElementById('chatMessageInput').placeholder = '输入消息...';
+                    }
+                };
+
+                chatMediaRecorder.start();
+                isChatRecording = true;
+                chatRecordBtn.style.color = '#ff6b6b';
+                chatRecordBtn.style.animation = 'pulse 1.5s infinite';
+                document.getElementById('chatMessageInput').placeholder = '正在聆听... (点击麦克风停止)';
+            } catch(e) { 
+                alert("无法访问麦克风，请检查权限"); 
+            }
+        });
+    }
+
     document.getElementById('chatInputForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         const input = document.getElementById('chatMessageInput');
@@ -133,7 +215,7 @@ function setupChat() {
     });
 }
 
-async function openNewChatModal() {
+window.openNewChatModal = async function() {
     const modal = document.getElementById('newChatModal');
     const listEl = document.getElementById('newChatContactList');
     listEl.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text-muted);"><div class="loading-ring" style="width:20px;height:20px;margin:0 auto 10px;"></div>加载联系人...</div>';
@@ -298,10 +380,17 @@ function showChatMessageMenu(bubbleEl, conversationId, e) {
     const isMine = bubbleEl.dataset.isMine === 'true';
     const timestamp = parseInt(bubbleEl.dataset.timestamp);
     const isAI = document.getElementById('chatMessages').dataset.isAiChat === 'true';
+    const rawTextData = bubbleEl.dataset.rawText || '';
     
     const isWithin2Mins = (Date.now() - timestamp) < 2 * 60 * 1000;
 
     let html = '';
+
+    if (rawTextData) {
+        html += `<div class="menu-item" style="padding:12px 20px; cursor:pointer; font-size:14px; color:var(--text-primary);" onclick="editChatMessage('${conversationId}', '${msgId}', '${rawTextData}')">编辑</div>`;
+        html += `<div class="menu-item" style="padding:12px 20px; cursor:pointer; font-size:14px; color:var(--text-primary);" onclick="copyChatMessage('${rawTextData}')">复制</div>`;
+    }
+
     if (isMine) {
         if (isWithin2Mins) html += `<div class="menu-item" style="padding:12px 20px; cursor:pointer; font-size:14px; color:var(--text-primary);" onclick="recallChatMessage('${conversationId}', '${msgId}')">撤回</div>`;
         if (isAI && bubbleEl.dataset.isLastUser === 'true') html += `<div class="menu-item" style="padding:12px 20px; cursor:pointer; font-size:14px; color:var(--accent);" onclick="regenerateLastAIResponse('${conversationId}')">🎲 重新生成回答</div>`;
@@ -327,6 +416,53 @@ function showChatMessageMenu(bubbleEl, conversationId, e) {
 window.deleteChatMessage = async function(convId, msgId) { document.querySelectorAll('.chat-msg-menu').forEach(m => m.remove()); await db.collection('conversations').doc(convId).collection('messages').doc(msgId).delete(); };
 
 window.recallChatMessage = async function(convId, msgId) { document.querySelectorAll('.chat-msg-menu').forEach(m => m.remove()); await db.collection('conversations').doc(convId).collection('messages').doc(msgId).delete(); };
+
+window.copyChatMessage = function(encodedText) {
+    document.querySelectorAll('.chat-msg-menu').forEach(m => m.remove());
+    try {
+        const text = decodeURIComponent(encodedText);
+        navigator.clipboard.writeText(text).then(() => {
+            const toast = document.createElement('div');
+            toast.textContent = '已复制';
+            toast.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,0.7);color:#fff;padding:8px 16px;border-radius:20px;font-size:13px;z-index:9999;pointer-events:none;';
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 1500);
+        }).catch(err => {
+            console.error("复制失败:", err);
+            alert("复制失败");
+        });
+    } catch(e) {
+        console.error("复制解析失败:", e);
+    }
+};
+
+window.editChatMessage = function(convId, msgId, encodedText) {
+    document.querySelectorAll('.chat-msg-menu').forEach(m => m.remove());
+    try {
+        const oldText = decodeURIComponent(encodedText);
+        showInputModal('编辑消息', '修改消息内容', oldText, async function(newText) {
+            if (newText && newText.trim() !== oldText) {
+                try {
+                    const docRef = db.collection('conversations').doc(convId).collection('messages').doc(msgId);
+                    const docSnap = await docRef.get();
+                    if (docSnap.exists) {
+                        const data = docSnap.data();
+                        if (data.audioUrl) {
+                            await docRef.update({ audioText: newText.trim() });
+                        } else {
+                            await docRef.update({ text: newText.trim() });
+                        }
+                    }
+                } catch(e) {
+                    console.error('编辑失败:', e);
+                    alert('编辑消息失败，请检查权限');
+                }
+            }
+        });
+    } catch(e) {
+        console.error("编辑解析失败:", e);
+    }
+};
 
 window.regenerateLastAIResponse = async function(convId) {
     document.querySelectorAll('.chat-msg-menu').forEach(m => m.remove());
@@ -391,14 +527,17 @@ async function renderChatInterface(conversationId, otherUserName, otherUserAvata
                 const msg = doc.data();
                 const isMine = msg.senderId === currentUser.uid;
                 const timeMillis = msg.createdAt ? msg.createdAt.toMillis() : Date.now();
+                const rawTextData = encodeURIComponent(msg.text || msg.audioText || '');
                 const messageDiv = document.createElement('div');
                 messageDiv.className = `chat-message ${isMine ? 'sent' : 'received'}`;
 
                 messageDiv.innerHTML = `
                     ${isMine ? myAvatarHtml : theirAvatarHtml}
-                    <div class="message-bubble" data-msg-id="${doc.id}" data-is-mine="${isMine}" data-is-last-user="${doc.id === lastUserMsgId}" data-timestamp="${timeMillis}">
+                    <div class="message-bubble" data-msg-id="${doc.id}" data-raw-text="${rawTextData}" data-is-mine="${isMine}" data-is-last-user="${doc.id === lastUserMsgId}" data-timestamp="${timeMillis}">
                         ${msg.imageUrl ? `<img src="${escapeHtml(msg.imageUrl)}" style="max-width:200px; max-height:200px; border-radius:8px; margin-bottom:${msg.text ? '8px' : '0'}; cursor:pointer; display:block;" onclick="openImageViewer('${escapeHtml(msg.imageUrl)}')">` : ''}
-                        ${msg.text ? escapeHtml(msg.text) : ''}
+                        ${msg.audioUrl ? `<audio src="${escapeHtml(msg.audioUrl)}" controls style="max-width:100%; height:40px; border-radius:8px; margin-bottom:${msg.audioText ? '6px' : '0'};"></audio>` : ''}
+                        ${msg.text && !msg.audioUrl ? escapeHtml(msg.text) : ''}
+                        ${msg.audioUrl && msg.audioText ? `<div style="font-size:13px;color:var(--text-primary);padding-top:6px;border-top:1px dashed rgba(128,128,128,0.3);">${escapeHtml(msg.audioText)}</div>` : ''}
                     </div>
                 `;
                 messagesEl.appendChild(messageDiv);
@@ -407,13 +546,14 @@ async function renderChatInterface(conversationId, otherUserName, otherUserAvata
         });
 }
 
-async function sendMessage(conversationId, text, isSilent = false, customSenderId = null, imageUrl = null) {
-    if (!currentUser || (!text && !imageUrl)) return;
+async function sendMessage(conversationId, text, isSilent = false, customSenderId = null, imageUrl = null, audioUrl = null, audioText = null) {
+    if (!currentUser || (!text && !imageUrl && !audioUrl)) return;
     const otherUserId = conversationId.replace(currentUser.uid, '').replace('_', '');
     const senderId = customSenderId || currentUser.uid;
+    const isChatWithAI = otherUserId === AI_COMPANION_USER_ID;
 
     // 触发纯前端动态记忆提取引擎 (后台静默运行，不阻塞 UI)
-    if (!isSilent && text && text.trim().length > 5 && senderId === currentUser.uid) { // 只提取用户自己发的消息
+    if (isChatWithAI && !isSilent && text && text.trim().length > 5 && senderId === currentUser.uid) { // 修复：仅在和AI私聊时提取记忆，保护真人社交隐私
         if (typeof extractAndSaveMemory === 'function') {
             extractAndSaveMemory(text);
         }
@@ -422,6 +562,10 @@ async function sendMessage(conversationId, text, isSilent = false, customSenderI
     const message = { senderId: senderId, createdAt: firebase.firestore.FieldValue.serverTimestamp(), isAIDiary: senderId === AI_COMPANION_USER_ID };
     if (text) message.text = text;
     if (imageUrl) message.imageUrl = imageUrl;
+    if (audioUrl) {
+        message.audioUrl = audioUrl;
+        message.audioText = audioText;
+    }
     
     const convRef = db.collection('conversations').doc(conversationId);
     await convRef.collection('messages').add(message);
@@ -429,6 +573,7 @@ async function sendMessage(conversationId, text, isSilent = false, customSenderI
     let lastMsgText = text;
     if (!text && imageUrl) lastMsgText = '[图片]';
     else if (text && imageUrl) lastMsgText = '[图片] ' + text;
+    else if (audioUrl) lastMsgText = '[语音] ' + (audioText || '');
 
     await convRef.update({
         lastMessage: { text: lastMsgText, senderId: senderId, timestamp: firebase.firestore.FieldValue.serverTimestamp() },

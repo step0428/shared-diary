@@ -59,6 +59,103 @@ function initAnniversary() {
       }
     });
   }
+
+  // 新增：初始化纪念日批量删除 UI
+  setupAnniversaryBatchDelete();
+}
+
+// 设置纪念日批量删除
+function setupAnniversaryBatchDelete() {
+  var view = document.getElementById('anniversaryView');
+  var list = document.getElementById('anniversaryList');
+  if (!view || !list || document.getElementById('annBatchControls')) return;
+
+  var controls = document.createElement('div');
+  controls.id = 'annBatchControls';
+  controls.style.cssText = 'display:flex; justify-content:flex-end; align-items:center; margin-bottom:15px;';
+  
+  controls.innerHTML = 
+    '<div id="annBatchToggleWrap">' +
+      '<button id="annBatchToggleBtn" style="padding:6px 16px; background:var(--bg-tertiary); border:1px solid var(--border); border-radius:20px; color:var(--text-primary); cursor:pointer; font-size:13px; display:flex; align-items:center; gap:6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg> 批量管理</button>' +
+    '</div>' +
+    '<div id="annBatchActions" class="hidden" style="display:flex; align-items:center; gap:15px; flex:1; justify-content:space-between; background:var(--bg-tertiary); padding:8px 15px; border-radius:12px; border:1px solid var(--border);">' +
+      '<label style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--text-primary); cursor:pointer; margin:0;">' +
+        '<input type="checkbox" id="annSelectAllCb" style="width:16px;height:16px;margin:0;"> 全选' +
+      '</label>' +
+      '<div style="display:flex; gap:10px;">' +
+        '<button id="annBatchCancelBtn" style="padding:6px 12px; background:transparent; border:1px solid var(--border); border-radius:8px; color:var(--text-primary); cursor:pointer; font-size:12px;">取消</button>' +
+        '<button id="annBatchDeleteBtn" style="padding:6px 12px; background:rgba(255,100,100,0.15); border:1px solid rgba(255,100,100,0.3); border-radius:8px; color:#ff6b6b; cursor:pointer; font-size:12px;">删除选中</button>' +
+      '</div>' +
+    '</div>';
+  
+  list.parentNode.insertBefore(controls, list);
+
+  var toggleBtn = document.getElementById('annBatchToggleBtn');
+  var actionsBar = document.getElementById('annBatchActions');
+  var toggleWrap = document.getElementById('annBatchToggleWrap');
+  var selectAllCb = document.getElementById('annSelectAllCb');
+  var cancelBtn = document.getElementById('annBatchCancelBtn');
+  var deleteBtn = document.getElementById('annBatchDeleteBtn');
+
+  function exitBatchMode() {
+    actionsBar.classList.add('hidden');
+    toggleWrap.style.display = 'block';
+    document.querySelectorAll('.ann-checkbox').forEach(function(cb) {
+      cb.style.display = 'none';
+      cb.checked = false;
+    });
+    selectAllCb.checked = false;
+  }
+
+  toggleBtn.addEventListener('click', function() {
+    actionsBar.classList.remove('hidden');
+    toggleWrap.style.display = 'none';
+    document.querySelectorAll('.ann-checkbox').forEach(function(cb) {
+      cb.style.display = 'block';
+    });
+  });
+
+  cancelBtn.addEventListener('click', exitBatchMode);
+
+  selectAllCb.addEventListener('change', function(e) {
+    var isChecked = e.target.checked;
+    document.querySelectorAll('.ann-checkbox').forEach(function(cb) {
+      if(cb.style.display !== 'none') cb.checked = isChecked;
+    });
+  });
+
+  deleteBtn.addEventListener('click', async function() {
+    var checkedCbs = document.querySelectorAll('.ann-checkbox:checked');
+    if (checkedCbs.length === 0) {
+      alert('请先选择要删除的纪念日');
+      return;
+    }
+    if (!confirm('确定要删除选中的 ' + checkedCbs.length + ' 个纪念日吗？')) return;
+
+    var origText = deleteBtn.textContent;
+    deleteBtn.textContent = '删除中...';
+    deleteBtn.disabled = true;
+
+    try {
+      var batch = db.batch();
+      checkedCbs.forEach(function(cb) {
+        var annId = cb.value;
+        var ref = db.collection('anniversaries').doc(annId);
+        batch.delete(ref);
+      });
+      await batch.commit();
+      
+      exitBatchMode();
+      loadAnniversaries();
+      if (typeof refreshCalendar === 'function') refreshCalendar();
+    } catch(err) {
+      console.error('批量删除失败:', err);
+      alert('批量删除失败，请重试');
+    } finally {
+      deleteBtn.textContent = origText;
+      deleteBtn.disabled = false;
+    }
+  });
 }
 
 // 打开模态框
@@ -275,8 +372,8 @@ async function showAnniversaryDetail(anniversaryId) {
     var iconDisplay = data.icon || '💝';
     var visibilityText = {
       'private': '仅自己可见',
-      'shared': '仅链接对象可见',
-      'public': '所有人可见',
+      'shared': '部分好友可见',
+      'public': '所有好友可见',
       'co-authored': '共同纪念日'
     }[data.visibility || 'public'] || '';
 
@@ -445,6 +542,16 @@ async function loadAnniversaries() {
     validAnniversaries.forEach(function(ann) {
       renderAnniversaryCard(ann, userMap);
     });
+
+    // 新增：如果当前处于批量管理模式，下拉刷新或重载后保持复选框的显示状态
+    var actionsBar = document.getElementById('annBatchActions');
+    if (actionsBar && !actionsBar.classList.contains('hidden')) {
+      document.querySelectorAll('.ann-checkbox').forEach(function(cb) {
+        cb.style.display = 'block';
+      });
+      var selectAllCb = document.getElementById('annSelectAllCb');
+      if (selectAllCb) selectAllCb.checked = false;
+    }
   } catch (e) {
     console.error('加载纪念日失败:', e);
     listEl.innerHTML = '<div class="anniversary-empty">加载失败</div>';
@@ -487,8 +594,8 @@ function renderAnniversaryCard(anniversary, userMap) {
 
   var visibilityText = {
     'private': '仅自己可见',
-    'shared': '仅链接对象可见',
-    'public': '所有人可见',
+    'shared': '部分好友可见',
+    'public': '所有好友可见',
     'co-authored': '共同纪念日'
   }[data.visibility || 'public'] || '';
   
@@ -528,8 +635,11 @@ function renderAnniversaryCard(anniversary, userMap) {
   var canEdit = (data.userId === currentUser.uid || (data.coAuthors && data.coAuthors.indexOf(currentUser.uid) !== -1)) && !isPendingCoAuthor;
 
   var actionsHtml = canEdit ? '<div class="card-actions"><button class="edit-btn" data-id="' + anniversary.id + '">编辑</button></div>' : '';
+  
+  // 新增：批量操作复选框（只有拥有编辑/删除权限的卡片才会渲染它）
+  var checkboxHtml = canEdit ? '<input type="checkbox" class="ann-checkbox" value="' + anniversary.id + '" style="position:absolute; top:12px; right:12px; z-index:20; display:none; width:18px; height:18px; cursor:pointer;">' : '';
 
-  card.innerHTML = pendingOverlay + actionsHtml +
+  card.innerHTML = pendingOverlay + actionsHtml + checkboxHtml +
     '<div style="position:absolute;top:12px;left:12px;font-size:11px;color:var(--text-muted);background:var(--bg-tertiary);padding:3px 8px;border-radius:10px;">' + visibilityText + '</div>' +
     '<div class="days-count" title="点击切换显示格式">' + daysDisplay + '</div>' +
     '<div class="days-text">' + daysText + '</div>' +

@@ -1,3 +1,11 @@
+// --- 紧急清理浏览器 PWA 顽固缓存 ---
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(function(registrations) {
+    for(let r of registrations) r.unregister();
+  });
+}
+console.log("🚀 新版代码已成功突破缓存加载！");
+
 // DOM 加载完成后初始化
 document.addEventListener('DOMContentLoaded', function() {
   initApp();
@@ -6,6 +14,16 @@ document.addEventListener('DOMContentLoaded', function() {
 let activeFilters = ['mine']; // 默认显示"我的记录"
 
 function initApp() {
+  // 修正 UI 文案，避免产生“所有人可见等于外网可见”的误解
+  document.querySelectorAll('select').forEach(function(select) {
+    if (select.id === 'diaryVisibility' || select.id === 'anniversaryVisibility') {
+      for (var i = 0; i < select.options.length; i++) {
+        if (select.options[i].value === 'public') select.options[i].text = '所有好友可见';
+        if (select.options[i].value === 'shared') select.options[i].text = '部分好友可见';
+      }
+    }
+  });
+
   setupAuth();
   setupModal();
   setupWriteDiary();
@@ -230,6 +248,15 @@ function setupMultiSelectDelete() {
     deleteBtn.innerHTML = originalContent;
     deleteBtn.disabled = false;
     selectAllCheckbox.checked = false;
+
+    // 新增：批量删除完成后，收回批量操作栏并隐藏所有勾选框
+    batchActions.classList.add('hidden');
+    batchSelectBtn.style.background = '';
+    batchSelectBtn.style.color = '';
+    document.querySelectorAll('.diary-checkbox').forEach(function(cb) {
+      cb.style.display = 'none';
+      cb.checked = false; // 确保所有勾选框都取消勾选
+    });
     loadDiaries();
   });
 }
@@ -517,6 +544,8 @@ window.renderAiCharConfig = function() {
   if (!char) return;
 
   let isBasic = window.charConfigTab === 'basic';
+  let isMemory = window.charConfigTab === 'memory';
+  let isVoice = window.charConfigTab === 'voice';
 
   let personas = currentAiConfig.personas || [];
   let personaOptions = '<option value="">-- 不绑定自设 --</option>';
@@ -526,8 +555,9 @@ window.renderAiCharConfig = function() {
 
   let tabsHtml = `
     <div style="display:flex;gap:10px;margin-bottom:15px;background:var(--bg-tertiary);padding:4px;border-radius:10px;border:1px solid var(--border);">
-      <button onclick="window.charConfigTab='basic'; renderAiCharConfig();" style="flex:1;padding:8px;border-radius:8px;border:none;background:${isBasic ? 'var(--accent)' : 'transparent'};color:${isBasic ? '#fff' : 'var(--text-muted)'};cursor:pointer;font-size:13px;font-weight:500;transition:all 0.2s;">🎭 设定与过往</button>
-      <button onclick="window.charConfigTab='memory'; renderAiCharConfig();" style="flex:1;padding:8px;border-radius:8px;border:none;background:${!isBasic ? 'var(--accent)' : 'transparent'};color:${!isBasic ? '#fff' : 'var(--text-muted)'};cursor:pointer;font-size:13px;font-weight:500;transition:all 0.2s;">🧠 记忆矩阵</button>
+      <button onclick="window.charConfigTab='basic'; renderAiCharConfig();" style="flex:1;padding:8px 4px;border-radius:8px;border:none;background:${isBasic ? 'var(--accent)' : 'transparent'};color:${isBasic ? '#fff' : 'var(--text-muted)'};cursor:pointer;font-size:12px;font-weight:500;transition:all 0.2s;">🎭 设定</button>
+      <button onclick="window.charConfigTab='memory'; renderAiCharConfig();" style="flex:1;padding:8px 4px;border-radius:8px;border:none;background:${isMemory ? 'var(--accent)' : 'transparent'};color:${isMemory ? '#fff' : 'var(--text-muted)'};cursor:pointer;font-size:12px;font-weight:500;transition:all 0.2s;">🧠 记忆</button>
+      <button onclick="window.charConfigTab='voice'; renderAiCharConfig();" style="flex:1;padding:8px 4px;border-radius:8px;border:none;background:${isVoice ? 'var(--accent)' : 'transparent'};color:${isVoice ? '#fff' : 'var(--text-muted)'};cursor:pointer;font-size:12px;font-weight:500;transition:all 0.2s;">🎤 语音</button>
     </div>
   `;
 
@@ -600,7 +630,33 @@ window.renderAiCharConfig = function() {
     </div>
   `;
 
-  detailsArea.innerHTML = tabsHtml + (isBasic ? basicHtml : memoryHtml);
+  let voiceHtml = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.1);">
+      <label style="font-size:14px;font-weight:bold;color:var(--text-primary);">开启角色语音 (MiniMax TTS)</label>
+      <label class="toggle-switch" style="transform:scale(0.8);transform-origin:right;margin:0;">
+        <input type="checkbox" ${char.ttsEnabled ? 'checked' : ''} onchange="updateCharConfig('${char.id}', 'ttsEnabled', this.checked)">
+        <span class="slider"></span>
+      </label>
+    </div>
+    <div style="margin-bottom:12px;">
+      <label style="font-size:12px;color:var(--text-muted);margin-bottom:4px;display:block;">MiniMax API Key</label>
+      <input type="password" placeholder="必填，用于生成声音的 Key" value="${escapeHtml(char.ttsApiKey || '')}" onchange="updateCharConfig('${char.id}', 'ttsApiKey', this.value)" style="width:100%;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:13px;box-sizing:border-box;">
+    </div>
+    <div style="margin-bottom:12px;">
+      <label style="font-size:12px;color:var(--text-muted);margin-bottom:4px;display:block;">模型版本</label>
+      <select onchange="updateCharConfig('${char.id}', 'ttsModel', this.value)" style="width:100%;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:13px;box-sizing:border-box;outline:none;">
+        <option value="speech-2.8-hd" ${char.ttsModel === 'speech-2.8-hd' ? 'selected' : ''}>speech-2.8-hd (情感最丰沛,推荐)</option>
+        <option value="speech-01-hd" ${char.ttsModel === 'speech-01-hd' ? 'selected' : ''}>speech-01-hd</option>
+      </select>
+    </div>
+    <div style="margin-bottom:12px;">
+      <label style="font-size:12px;color:var(--text-muted);margin-bottom:4px;display:flex;justify-content:space-between;"><span>音色 ID (Voice ID)</span><a href="https://platform.minimaxi.com/document/system-voice-id" target="_blank" style="color:var(--accent);text-decoration:none;font-size:11px;">去官网听音色</a></label>
+      <input type="text" placeholder="如 male-qn-qingse" value="${escapeHtml(char.ttsVoiceId || '')}" onchange="updateCharConfig('${char.id}', 'ttsVoiceId', this.value)" style="width:100%;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:13px;box-sizing:border-box;">
+      <p style="font-size:11px;color:var(--text-muted);margin-top:6px;">推荐男声：male-qn-qingse (青涩) / moss_audio_ce44fc67... (成熟)<br>推荐女声：female-shaonv (少女) / moss_audio_aaa1346a... (御姐)</p>
+    </div>
+  `;
+
+  detailsArea.innerHTML = tabsHtml + (isBasic ? basicHtml : (isMemory ? memoryHtml : voiceHtml));
 };
 
 window.switchEditingChar = function(id) {
@@ -1401,12 +1457,18 @@ function setupWriteDiary() {
   var isRecording = false;
   window.recordingAudioCtx = null;
   window.recordingAnimationId = null;
+  // 新增：日记语音识别变量
+  window.diaryAudioTranscript = '';
+  window.diarySpeechRecognition = null;
 
   recordBtn.addEventListener('click', async function() {
     if (isRecording) {
       // 停止录音
       if (mediaRecorder) {
         mediaRecorder.stop();
+      }
+      if (window.diarySpeechRecognition) {
+        window.diarySpeechRecognition.stop();
       }
       isRecording = false;
       recordBtn.textContent = '🎤 录音';
@@ -1423,6 +1485,23 @@ function setupWriteDiary() {
       var stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaRecorder = new MediaRecorder(stream);
       audioChunks = [];
+      window.diaryAudioTranscript = '';
+
+      // 新增：开启浏览器原生语音识别（将声音同步转化为 AI 能看懂的文字）
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SpeechRecognition) {
+          window.diarySpeechRecognition = new SpeechRecognition();
+          window.diarySpeechRecognition.continuous = true;
+          window.diarySpeechRecognition.interimResults = true;
+          window.diarySpeechRecognition.onresult = function(e) {
+              let final = '';
+              for (let i = e.resultIndex; i < e.results.length; ++i) {
+                  if (e.results[i].isFinal) final += e.results[i][0].transcript;
+              }
+              window.diaryAudioTranscript += final;
+          };
+          window.diarySpeechRecognition.start();
+      }
 
       // 初始化实时录音波形
       document.getElementById('audioPreview').innerHTML = '<div style="display:flex;flex-direction:column;gap:10px;padding:15px;background:var(--bg-tertiary);border-radius:12px;align-items:center;">' +
@@ -1558,7 +1637,7 @@ function setupWriteDiary() {
     var audioFile = selectedAudioFile;
 
     try {
-      await saveDiary(content, date, visibility, sharedWith, imageFiles, coAuthors, audioFile);
+      await saveDiary(content, date, visibility, sharedWith, imageFiles, coAuthors, audioFile, window.diaryAudioTranscript);
     } finally {
       submitBtn.textContent = originalText;
       submitBtn.disabled = false;
@@ -1745,7 +1824,8 @@ window.getDiaryFormState = function() {
     sharedWith: sharedWith.sort(),
     coAuthors: coAuthors.sort(),
     imagesCount: selectedImageFiles.length,
-    hasAudio: !!selectedAudioFile
+    hasAudio: !!selectedAudioFile,
+    audioText: window.diaryAudioTranscript
   });
 };
 
@@ -1860,6 +1940,29 @@ function setupLinkManagement() {
         acceptedByDisplayName: friendData.displayName || friendData.email
       });
 
+      // --- 新增：连接成功瞬间，自动将我的过往“部分可见”记录授权给新好友 ---
+      try {
+        var batch = db.batch();
+        var count = 0;
+        var diarySnap = await db.collection('diaries').where('userId', '==', currentUser.uid).where('visibility', '==', 'shared').get();
+        diarySnap.docs.forEach(function(doc) {
+          if ((doc.data().sharedWith || []).indexOf(friendDoc.id) === -1) {
+            batch.update(doc.ref, { sharedWith: firebase.firestore.FieldValue.arrayUnion(friendDoc.id) });
+            count++;
+          }
+        });
+        var annSnap = await db.collection('anniversaries').where('userId', '==', currentUser.uid).where('visibility', '==', 'shared').get();
+        annSnap.docs.forEach(function(doc) {
+          if ((doc.data().sharedWith || []).indexOf(friendDoc.id) === -1) {
+            batch.update(doc.ref, { sharedWith: firebase.firestore.FieldValue.arrayUnion(friendDoc.id) });
+            count++;
+          }
+        });
+        if (count > 0) await batch.commit();
+      } catch (e) {
+        console.error('自动授权历史记录失败:', e);
+      }
+
       showConnectResult('连接成功！');
       document.getElementById('friendCodeInput').value = '';
       loadLinkedUsers();
@@ -1921,9 +2024,58 @@ async function loadLinkedUsers() {
 
     var item = document.createElement('div');
     item.className = 'linked-item';
-    item.innerHTML = '<div class="user-info"><span class="user-email">' + escapeHtml(otherUser.displayName) + '</span><span class="user-status">已连接</span></div><button class="unlink-btn" data-id="' + linkDoc.id + '">解除</button>';
+    item.innerHTML = '<div class="user-info"><span class="user-email">' + escapeHtml(otherUser.displayName) + '</span><span class="user-status">已连接</span></div>' +
+      '<div style="display:flex; gap:8px;">' +
+        '<button class="sync-history-btn" data-uid="' + otherUid + '" style="padding:4px 10px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);font-size:12px;cursor:pointer;" title="将过往部分可见的记录也分享给TA">补发过往</button>' +
+        '<button class="unlink-btn" data-id="' + linkDoc.id + '" style="padding:4px 10px;background:rgba(255,100,100,0.1);border:1px solid rgba(255,100,100,0.3);border-radius:6px;color:#ff6b6b;font-size:12px;cursor:pointer;">解除</button>' +
+      '</div>';
     linkedUsers.appendChild(item);
   }
+
+  linkedUsers.querySelectorAll('.sync-history-btn').forEach(function(btn) {
+    btn.addEventListener('click', async function() {
+      var targetUid = btn.dataset.uid;
+      if (confirm('确定要将你过往所有「部分好友可见」的日记和纪念日，都开放给这位新好友查看吗？\n(注：原本为“所有好友可见”的记录新好友默认就能看，无需补发)')) {
+        btn.textContent = '同步中...';
+        btn.disabled = true;
+        try {
+          var batch = db.batch();
+          var count = 0;
+          
+          // 查找所有自己发过的、且设定为 shared 的日记
+          var diarySnap = await db.collection('diaries').where('userId', '==', currentUser.uid).where('visibility', '==', 'shared').get();
+          diarySnap.docs.forEach(function(doc) {
+            var sharedWith = doc.data().sharedWith || [];
+            if (sharedWith.indexOf(targetUid) === -1) {
+              batch.update(doc.ref, { sharedWith: firebase.firestore.FieldValue.arrayUnion(targetUid) });
+              count++;
+            }
+          });
+
+          // 查找所有自己发过的、且设定为 shared 的纪念日
+          var annSnap = await db.collection('anniversaries').where('userId', '==', currentUser.uid).where('visibility', '==', 'shared').get();
+          annSnap.docs.forEach(function(doc) {
+            var sharedWith = doc.data().sharedWith || [];
+            if (sharedWith.indexOf(targetUid) === -1) {
+              batch.update(doc.ref, { sharedWith: firebase.firestore.FieldValue.arrayUnion(targetUid) });
+              count++;
+            }
+          });
+
+          if (count > 0) {
+            await batch.commit();
+          }
+          alert('成功将 ' + count + ' 条历史记录同步给该好友！');
+          btn.textContent = '已同步';
+        } catch (e) {
+          console.error(e);
+          alert('同步失败: ' + e.message);
+          btn.textContent = '补发过往';
+          btn.disabled = false;
+        }
+      }
+    });
+  });
 
   linkedUsers.querySelectorAll('.unlink-btn').forEach(function(btn) {
     btn.addEventListener('click', async function() {
