@@ -14,6 +14,9 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
+// 💥 核心网络修复：在数据库初始化后第一时间强制使用长轮询！
+db.settings({ experimentalForceLongPolling: true });
+
 // 特殊的 AI 用户ID，用于识别 AI 评论
 const AI_COMPANION_USER_ID = 'AI_COMPANION_USER_ID';
 
