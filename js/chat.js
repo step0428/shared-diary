@@ -229,15 +229,17 @@ window.openNewChatModal = async function() {
 
         // 1. 添加 AI 伴侣
         if (currentUserData && currentUserData.aiConfig && currentUserData.aiConfig.enabled) {
-            let activeChar = (currentUserData.aiConfig.chars || []).find(c => c.id === currentUserData.aiConfig.activeCharId) || (currentUserData.aiConfig.chars || [])[0] || {};
-            let aiName = (activeChar.name || '神秘的ta') + ' 🤖';
-            let aiAvatar = activeChar.avatar || '🤖';
-            
-            let item = document.createElement('div');
-            item.style.cssText = 'display:flex;align-items:center;padding:12px;background:var(--bg-tertiary);border-radius:10px;cursor:pointer;transition:all 0.2s;border:1px solid var(--border);';
-            item.innerHTML = (aiAvatar.startsWith('http') ? `<img src="${escapeHtml(aiAvatar)}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;margin-right:12px;border:1px solid rgba(255,255,255,0.2);">` : `<span style="display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;background:#8e44ad;font-size:20px;color:#fff;margin-right:12px;">${escapeHtml(aiAvatar)}</span>`) + `<span style="font-size:15px;color:var(--text-primary);font-weight:500;">${escapeHtml(aiName)}</span>`;
-            item.onclick = () => { modal.classList.add('hidden'); openChat(AI_COMPANION_USER_ID, aiName, aiAvatar); };
-            listEl.appendChild(item);
+            let chars = currentUserData.aiConfig.chars || [];
+            if (chars.length === 0) chars = [{ id: typeof AI_COMPANION_USER_ID !== 'undefined' ? AI_COMPANION_USER_ID : 'char_ai', name: '神秘的ta', avatar: '🤖' }];
+            chars.forEach(char => {
+                let aiName = (char.name || '神秘的ta') + ' 🤖';
+                let aiAvatar = char.avatar || '🤖';
+                let item = document.createElement('div');
+                item.style.cssText = 'display:flex;align-items:center;padding:12px;background:var(--bg-tertiary);border-radius:10px;cursor:pointer;transition:all 0.2s;border:1px solid var(--border);';
+                item.innerHTML = (aiAvatar.startsWith('http') ? `<img src="${escapeHtml(aiAvatar)}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;margin-right:12px;border:1px solid rgba(255,255,255,0.2);">` : `<span style="display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;background:#8e44ad;font-size:20px;color:#fff;margin-right:12px;">${escapeHtml(aiAvatar)}</span>`) + `<span style="font-size:15px;color:var(--text-primary);font-weight:500;">${escapeHtml(aiName)}</span>`;
+                item.onclick = () => { modal.classList.add('hidden'); openChat(char.id, aiName, aiAvatar); };
+                listEl.appendChild(item);
+            });
         }
 
         // 2. 添加真人好友
@@ -295,12 +297,18 @@ async function loadConversations() {
             const userInfoMap = new Map(userInfos.map(u => [u.userId, u]));
 
             if (currentUserData.aiConfig && currentUserData.aiConfig.enabled) {
-                 let activeChar = (currentUserData.aiConfig.chars || []).find(c => c.id === currentUserData.aiConfig.activeCharId) || (currentUserData.aiConfig.chars || [])[0] || {};
-                 userInfoMap.set(AI_COMPANION_USER_ID, {
-                     userId: AI_COMPANION_USER_ID,
-                     displayName: (activeChar.name || '神秘的ta') + ' 🤖',
-                     avatarUrl: activeChar.avatar || '🤖'
+                 let chars = currentUserData.aiConfig.chars || [];
+                 chars.forEach(char => {
+                     userInfoMap.set(char.id, { userId: char.id, displayName: (char.name || '神秘的ta') + ' 🤖', avatarUrl: '', aiAvatar: char.avatar || '🤖' });
                  });
+                 if (typeof AI_COMPANION_USER_ID !== 'undefined') {
+                     let activeChar = chars.find(c => c.id === currentUserData.aiConfig.activeCharId) || chars[0] || {};
+                     userInfoMap.set(AI_COMPANION_USER_ID, {
+                         userId: AI_COMPANION_USER_ID,
+                         displayName: (activeChar.name || '神秘的ta') + ' 🤖',
+                         avatarUrl: '', aiAvatar: activeChar.avatar || '🤖'
+                     });
+                 }
             }
 
             snapshot.docs.forEach(doc => {
@@ -472,7 +480,7 @@ window.regenerateLastAIResponse = async function(convId) {
         const batch = db.batch();
         let deletedCount = 0;
         for (let doc of msgsSnap.docs) {
-            if (doc.data().senderId === AI_COMPANION_USER_ID) {
+            if (doc.data().senderId === AI_COMPANION_USER_ID || String(doc.data().senderId).startsWith('char_')) {
                 batch.delete(doc.ref);
                 deletedCount++;
             } else {
@@ -497,7 +505,7 @@ async function renderChatInterface(conversationId, otherUserName, otherUserAvata
     const messagesEl = document.getElementById('chatMessages');
     const askBtn = document.getElementById('askAIReplyBtn');
 
-    if (askBtn) askBtn.style.display = isAI ? 'flex' : 'none';
+    if (askBtn) askBtn.style.display = (isAI || String(conversationId).includes('char_')) ? 'flex' : 'none';
     if (messagesEl) messagesEl.dataset.isAiChat = isAI ? 'true' : 'false';
 
     header.textContent = otherUserName;
@@ -508,7 +516,8 @@ async function renderChatInterface(conversationId, otherUserName, otherUserAvata
 
     // 预渲染双方头像 HTML
     const myAvatarHtml = renderUserAvatar(currentUserData, 32, '0');
-    const theirAvatarHtml = renderUserAvatar({ userId: isAI ? AI_COMPANION_USER_ID : conversationId.replace(currentUser.uid, '').replace('_', ''), displayName: otherUserName, avatarUrl: otherUserAvatar, aiAvatar: otherUserAvatar }, 32, '0');
+    const theOtherId = conversationId.replace(currentUser.uid, '').replace('_', '');
+    const theirAvatarHtml = renderUserAvatar({ userId: (isAI || String(theOtherId).startsWith('char_')) ? theOtherId : theOtherId, displayName: otherUserName, avatarUrl: otherUserAvatar, aiAvatar: otherUserAvatar }, 32, '0');
 
     unsubscribeChatListener = db.collection('conversations').doc(conversationId).collection('messages')
         .orderBy('createdAt', 'asc')
@@ -550,16 +559,16 @@ async function sendMessage(conversationId, text, isSilent = false, customSenderI
     if (!currentUser || (!text && !imageUrl && !audioUrl)) return;
     const otherUserId = conversationId.replace(currentUser.uid, '').replace('_', '');
     const senderId = customSenderId || currentUser.uid;
-    const isChatWithAI = otherUserId === AI_COMPANION_USER_ID;
+    const isChatWithAI = otherUserId === AI_COMPANION_USER_ID || String(otherUserId).startsWith('char_');
 
-    // 触发纯前端动态记忆提取引擎 (后台静默运行，不阻塞 UI)
+    // 触发纯前端动态记忆提取引擎
     if (isChatWithAI && !isSilent && text && text.trim().length > 5 && senderId === currentUser.uid) { // 修复：仅在和AI私聊时提取记忆，保护真人社交隐私
         if (typeof extractAndSaveMemory === 'function') {
             extractAndSaveMemory(text);
         }
     }
 
-    const message = { senderId: senderId, createdAt: firebase.firestore.FieldValue.serverTimestamp(), isAIDiary: senderId === AI_COMPANION_USER_ID };
+    const message = { senderId: senderId, createdAt: firebase.firestore.FieldValue.serverTimestamp(), isAIDiary: senderId === AI_COMPANION_USER_ID || String(senderId).startsWith('char_') };
     if (text) message.text = text;
     if (imageUrl) message.imageUrl = imageUrl;
     if (audioUrl) {

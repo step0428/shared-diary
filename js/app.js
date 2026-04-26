@@ -1172,63 +1172,69 @@ function renderFriendSidebar() {
     let hasAI = false;
     try {
       if (currentUserData && currentUserData.aiConfig && currentUserData.aiConfig.enabled) {
-        let activeChar = (currentUserData.aiConfig.chars || []).find(c => c.id === currentUserData.aiConfig.activeCharId) || (currentUserData.aiConfig.chars || [])[0] || {};
-        aiName = activeChar.name || '神秘的ta';
-        aiAvatarChar = activeChar.avatar || '🤖';
         hasAI = true;
       }
     } catch(e) {}
 
     if (hasAI) {
-      var aiItem = document.createElement('div');
-      aiItem.className = 'friend-item';
-      aiItem.dataset.filter = AI_COMPANION_USER_ID;
-      aiItem.style.display = 'flex';
-      aiItem.style.alignItems = 'center';
-      aiItem.style.justifyContent = 'space-between';
+      let chars = currentUserData.aiConfig.chars || [];
+      if (chars.length === 0) chars = [{ id: typeof AI_COMPANION_USER_ID !== 'undefined' ? AI_COMPANION_USER_ID : 'char_ai', name: '神秘的ta', avatar: '🤖' }];
       
-      let aiAvatarHtml = '';
-      if (aiAvatarChar.startsWith('http')) {
-        aiAvatarHtml = '<img src="' + escapeHtml(aiAvatarChar) + '" style="width:24px;height:24px;border-radius:50%;object-fit:cover;margin-right:8px;border:1px solid rgba(255,255,255,0.2);">';
-      } else {
-        aiAvatarHtml = '<span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:#8e44ad;font-size:14px;color:#fff;margin-right:8px;">' + escapeHtml(aiAvatarChar) + '</span>';
-      }
-      
-      let leftDiv = document.createElement('div');
-      leftDiv.style.display = 'flex';
-      leftDiv.style.alignItems = 'center';
-      leftDiv.innerHTML = aiAvatarHtml + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(aiName) + '</span>';
-      
-      let rightBtn = document.createElement('button');
-      rightBtn.innerHTML = '✨ 互动';
-      rightBtn.title = '让TA发条动态';
-      rightBtn.style.cssText = 'background:var(--accent-light);border:1px solid var(--accent);color:var(--accent);border-radius:10px;cursor:pointer;font-size:11px;padding:3px 8px;transition:all 0.2s;';
-      rightBtn.onclick = function(e) {
-        e.stopPropagation();
-        if (typeof triggerAIPostDiary === 'function') triggerAIPostDiary(rightBtn);
-      };
-      
-      aiItem.appendChild(leftDiv);
-      aiItem.appendChild(rightBtn);
+      chars.forEach(char => {
+        let aiName = char.name || '神秘的ta';
+        let aiAvatarChar = char.avatar || '🤖';
+        let filterId = char.id;
 
-      if (activeFilters.indexOf(AI_COMPANION_USER_ID) !== -1) {
-        aiItem.classList.add('active');
-      }
-
-      aiItem.addEventListener('click', function(e) {
-        var clickedItem = e.currentTarget;
-        var filterVal = clickedItem.dataset.filter;
-        var idx = activeFilters.indexOf(filterVal);
-        if (idx !== -1) {
-          activeFilters.splice(idx, 1);
+        var aiItem = document.createElement('div');
+        aiItem.className = 'friend-item';
+        aiItem.dataset.filter = filterId;
+        aiItem.style.display = 'flex';
+        aiItem.style.alignItems = 'center';
+        aiItem.style.justifyContent = 'space-between';
+        
+        let aiAvatarHtml = '';
+        if (aiAvatarChar.startsWith('http')) {
+          aiAvatarHtml = '<img src="' + escapeHtml(aiAvatarChar) + '" style="width:24px;height:24px;border-radius:50%;object-fit:cover;margin-right:8px;border:1px solid rgba(255,255,255,0.2);">';
         } else {
-          activeFilters.push(filterVal);
+          aiAvatarHtml = '<span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:#8e44ad;font-size:14px;color:#fff;margin-right:8px;">' + escapeHtml(aiAvatarChar) + '</span>';
         }
-        clickedItem.classList.toggle('active', activeFilters.indexOf(filterVal) !== -1);
-        refreshActiveView();
-      });
+        
+        let leftDiv = document.createElement('div');
+        leftDiv.style.display = 'flex';
+        leftDiv.style.alignItems = 'center';
+        leftDiv.innerHTML = aiAvatarHtml + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(aiName) + '</span>';
+        
+        let rightBtn = document.createElement('button');
+        rightBtn.innerHTML = '✨ 互动';
+        rightBtn.title = '让TA发条动态';
+        rightBtn.style.cssText = 'background:var(--accent-light);border:1px solid var(--accent);color:var(--accent);border-radius:10px;cursor:pointer;font-size:11px;padding:3px 8px;transition:all 0.2s;';
+        rightBtn.onclick = function(e) {
+          e.stopPropagation();
+          if (typeof triggerAIPostDiary === 'function') triggerAIPostDiary(rightBtn, false, filterId);
+        };
+        
+        aiItem.appendChild(leftDiv);
+        aiItem.appendChild(rightBtn);
 
-      fragment.appendChild(aiItem);
+        if (activeFilters.indexOf(filterId) !== -1) {
+          aiItem.classList.add('active');
+        }
+
+        aiItem.addEventListener('click', function(e) {
+          var clickedItem = e.currentTarget;
+          var filterVal = clickedItem.dataset.filter;
+          var idx = activeFilters.indexOf(filterVal);
+          if (idx !== -1) {
+            activeFilters.splice(idx, 1);
+          } else {
+            activeFilters.push(filterVal);
+          }
+          clickedItem.classList.toggle('active', activeFilters.indexOf(filterVal) !== -1);
+          refreshActiveView();
+        });
+
+        fragment.appendChild(aiItem);
+      });
     }
 
     for (var j = 0; j < linkMap.length; j++) {

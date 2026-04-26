@@ -353,21 +353,22 @@ async function showAnniversaryDetail(anniversaryId) {
       data.coAuthors.forEach(function(uid) { if (userIds.indexOf(uid) === -1) userIds.push(uid); });
     }
     
-    let queryIds = userIds.filter(id => id !== 'AI_COMPANION_USER_ID');
+    let aiIds = userIds.filter(id => id === 'AI_COMPANION_USER_ID' || String(id).startsWith('char_'));
+    let queryIds = userIds.filter(id => id !== 'AI_COMPANION_USER_ID' && !String(id).startsWith('char_'));
     var userInfos = queryIds.length > 0 ? await getBatchUserInfo(queryIds) : [];
     var userMap = {};
     userInfos.forEach(function(u) { userMap[u.userId] = u; });
     
-    if (userIds.includes('AI_COMPANION_USER_ID')) {
+    aiIds.forEach(function(aiId) {
        let aiConfig = currentUserData && currentUserData.aiConfig ? currentUserData.aiConfig : {};
-       let activeChar = (aiConfig.chars || []).find(c => c.id === aiConfig.activeCharId) || (aiConfig.chars || [])[0] || {};
-       userMap['AI_COMPANION_USER_ID'] = {
-           userId: 'AI_COMPANION_USER_ID',
+       let activeChar = (aiConfig.chars || []).find(c => c.id === aiId) || (aiConfig.chars || []).find(c => c.id === aiConfig.activeCharId) || (aiConfig.chars || [])[0] || {};
+       userMap[aiId] = {
+           userId: aiId,
            displayName: (activeChar.name || '神秘的ta') + ' 🤖',
            avatarUrl: '',
            aiAvatar: activeChar.avatar || '🤖'
        };
-    }
+    });
 
     var iconDisplay = data.icon || '💝';
     var visibilityText = {
@@ -521,23 +522,24 @@ async function loadAnniversaries() {
     }
 
     var userMap = {};
-    let queryIds = userIds.filter(id => id !== 'AI_COMPANION_USER_ID');
+    let aiIds = userIds.filter(id => id === 'AI_COMPANION_USER_ID' || String(id).startsWith('char_'));
+    let queryIds = userIds.filter(id => id !== 'AI_COMPANION_USER_ID' && !String(id).startsWith('char_'));
     if (queryIds.length > 0) {
       var userInfos = await getBatchUserInfo(queryIds);
       userInfos.forEach(function(u) { userMap[u.userId] = u; });
     }
     
     // 如果纪念日里有 AI，向 map 中注入 AI 身份信息
-    if (userIds.includes('AI_COMPANION_USER_ID')) {
+    aiIds.forEach(function(aiId) {
        let aiConfig = currentUserData && currentUserData.aiConfig ? currentUserData.aiConfig : {};
-       let activeChar = (aiConfig.chars || []).find(c => c.id === aiConfig.activeCharId) || (aiConfig.chars || [])[0] || {};
-       userMap['AI_COMPANION_USER_ID'] = {
-           userId: 'AI_COMPANION_USER_ID',
+       let activeChar = (aiConfig.chars || []).find(c => c.id === aiId) || (aiConfig.chars || []).find(c => c.id === aiConfig.activeCharId) || (aiConfig.chars || [])[0] || {};
+       userMap[aiId] = {
+           userId: aiId,
            displayName: (activeChar.name || '神秘的ta') + ' 🤖',
            avatarUrl: '',
            aiAvatar: activeChar.avatar || '🤖'
        };
-    }
+    });
 
     validAnniversaries.forEach(function(ann) {
       renderAnniversaryCard(ann, userMap);
@@ -826,16 +828,18 @@ async function loadAnniversaryCoAuthors() {
   
   // 优先注入 AI
   if (currentUserData && currentUserData.aiConfig && currentUserData.aiConfig.enabled) {
-    let activeChar = (currentUserData.aiConfig.chars || []).find(c => c.id === currentUserData.aiConfig.activeCharId) || (currentUserData.aiConfig.chars || [])[0] || {};
-    let aiName = (activeChar.name || '神秘的ta') + ' 🤖';
-    var aiItem = document.createElement('label');
-    aiItem.className = 'share-item';
-    aiItem.innerHTML = '<input type="checkbox" value="AI_COMPANION_USER_ID"><span>' + escapeHtml(aiName) + '</span>';
-    var aiCheckbox = aiItem.querySelector('input');
-    aiCheckbox.addEventListener('change', function() {
-      this.closest('.share-item').classList.toggle('selected', this.checked);
+    let chars = currentUserData.aiConfig.chars || [];
+    chars.forEach(activeChar => {
+      let aiName = (activeChar.name || '神秘的ta') + ' 🤖';
+      var aiItem = document.createElement('label');
+      aiItem.className = 'share-item';
+      aiItem.innerHTML = '<input type="checkbox" value="' + activeChar.id + '"><span>' + escapeHtml(aiName) + '</span>';
+      var aiCheckbox = aiItem.querySelector('input');
+      aiCheckbox.addEventListener('change', function() {
+        this.closest('.share-item').classList.toggle('selected', this.checked);
+      });
+      coAuthorsList.appendChild(aiItem);
     });
-    coAuthorsList.appendChild(aiItem);
   }
   
   if (linkedIds.length === 0 && coAuthorsList.children.length === 0) {

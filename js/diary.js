@@ -4,7 +4,7 @@ function renderUserAvatar(userData, size, marginRight, title) {
   let titleAttr = title ? ' title="' + escapeHtml(title) + '"' : '';
   if (userData && userData.avatarUrl) {
     return '<img src="' + userData.avatarUrl + '" style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;object-fit:cover;margin-right:' + marginRight + ';"' + titleAttr + '>';
-  } else if (userData && userData.userId === AI_COMPANION_USER_ID) { // AI 助手的特殊头像
+  } else if (userData && (userData.userId === AI_COMPANION_USER_ID || String(userData.userId).startsWith('char_'))) { // AI 助手的特殊头像
     let aiAvatarStr = userData.aiAvatar || '🤖';
     if (aiAvatarStr.startsWith('http')) {
       return '<img src="' + aiAvatarStr + '" style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;object-fit:cover;margin-right:' + marginRight + ';"' + titleAttr + '>';
@@ -23,7 +23,7 @@ function isDiaryVisible(diaryData, currentUserId, linkedUserIds, filtersArray, o
 
   if (!filtersArray || filtersArray.length === 0) return false; // 什么都没勾选时，什么都不展示
 
-  let isAIDiary = diaryData.isAIDiary === true || (typeof AI_COMPANION_USER_ID !== 'undefined' && diaryData.userId === AI_COMPANION_USER_ID);
+  let isAIDiary = diaryData.isAIDiary === true || (typeof AI_COMPANION_USER_ID !== 'undefined' && (diaryData.userId === AI_COMPANION_USER_ID || String(diaryData.userId).startsWith('char_')));
   let isMine = diaryData.userId === currentUserId && !isAIDiary;
   let isCoAuthor = diaryData.coAuthors && diaryData.coAuthors.indexOf(currentUserId) !== -1;
 
@@ -48,8 +48,8 @@ function isDiaryVisible(diaryData, currentUserId, linkedUserIds, filtersArray, o
         matchesFilter = true;
         break;
       }
-    } else if (typeof AI_COMPANION_USER_ID !== 'undefined' && filter === AI_COMPANION_USER_ID) {
-      if (isAIDiary) {
+    } else if (typeof AI_COMPANION_USER_ID !== 'undefined' && (filter === AI_COMPANION_USER_ID || filter.startsWith('char_'))) {
+      if (isAIDiary && (diaryData.aiCharId === filter || (!diaryData.aiCharId && filter === AI_COMPANION_USER_ID))) {
         matchesFilter = true;
         break;
       }
@@ -566,12 +566,13 @@ window.renderMoreDiaries = async function(token) {
       let authorName = userData ? (userData.displayName || userData.email) : '未知';
       let authorAvatar = userData && userData.avatarUrl ? userData.avatarUrl : '';
       let isMyDiary = data.userId === currentUser.uid;
-      let isAIDiary = data.userId === AI_COMPANION_USER_ID || data.isAIDiary === true;
+      let isAIDiary = (data.userId === AI_COMPANION_USER_ID || String(data.userId).startsWith('char_')) || data.isAIDiary === true;
       let isCoAuthored = data.visibility === 'co-authored' && data.coAuthors && data.coAuthors.length > 0;
 
       if (isAIDiary) {
         let aiConfig = currentUserData && currentUserData.aiConfig ? currentUserData.aiConfig : {};
-        let activeChar = (aiConfig.chars || []).find(c => c.id === aiConfig.activeCharId) || (aiConfig.chars || [])[0] || {};
+        let charIdToUse = data.aiCharId || aiConfig.activeCharId;
+        let activeChar = (aiConfig.chars || []).find(c => c.id === charIdToUse) || (aiConfig.chars || [])[0] || {};
         authorName = (activeChar.name || '神秘的ta') + ' 🤖';
       }
 
@@ -599,7 +600,8 @@ window.renderMoreDiaries = async function(token) {
       } else {
         if (isAIDiary) {
           let aiConfig = currentUserData && currentUserData.aiConfig ? currentUserData.aiConfig : {};
-          let activeChar = (aiConfig.chars || []).find(c => c.id === aiConfig.activeCharId) || (aiConfig.chars || [])[0] || {};
+          let charIdToUse = data.aiCharId || aiConfig.activeCharId;
+          let activeChar = (aiConfig.chars || []).find(c => c.id === charIdToUse) || (aiConfig.chars || [])[0] || {};
           let aiAvatarStr = activeChar.avatar || '🤖';
           if (aiAvatarStr.startsWith('http')) {
             authorAvatarHtml = '<img src="' + escapeHtml(aiAvatarStr) + '" style="width:16px;height:16px;border-radius:50%;object-fit:cover;margin-right:4px;" title="' + escapeHtml(authorName) + '">';
@@ -875,11 +877,11 @@ async function showDiaryDetail(diaryId, isMine, isCoAuthor) {
   let authorName = userData ? (userData.displayName || userData.email) : '未知';
   let authorAvatar = userData && userData.avatarUrl ? userData.avatarUrl : '';
 
-  if (data.userId === AI_COMPANION_USER_ID) {
+  if (data.userId === AI_COMPANION_USER_ID || String(data.userId).startsWith('char_')) {
     let aiConfig = currentUserData && currentUserData.aiConfig ? currentUserData.aiConfig : {};
-    let activeChar = (aiConfig.chars || []).find(c => c.id === aiConfig.activeCharId) || (aiConfig.chars || [])[0] || {};
+    let activeChar = (aiConfig.chars || []).find(c => c.id === data.userId) || (aiConfig.chars || []).find(c => c.id === aiConfig.activeCharId) || (aiConfig.chars || [])[0] || {};
     authorName = (activeChar.name || '神秘的ta') + ' 🤖';
-    userData = { userId: AI_COMPANION_USER_ID, displayName: authorName, aiAvatar: activeChar.avatar || '🤖' }; // 给 renderUserAvatar 伪造身份
+    userData = { userId: data.userId, displayName: authorName, aiAvatar: activeChar.avatar || '🤖' };
   }
 
   // 显示作者头像和名称
@@ -940,7 +942,7 @@ async function showDiaryDetail(diaryId, isMine, isCoAuthor) {
   let editBtnHtml = canEditOrDelete ? '<button id="editDiaryBtn" style="margin-top:20px;margin-right:10px;padding:10px 20px;background:var(--accent-light);border:1px solid var(--accent);border-radius:8px;color:var(--accent);cursor:pointer;">编辑</button>' : '';
   let deleteBtnHtml = canEditOrDelete ? '<button id="deleteDiaryBtn" style="margin-top:20px;padding:10px 20px;background:rgba(255,100,100,0.2);border:1px solid rgba(255,100,100,0.4);border-radius:8px;color:#ff6b6b;cursor:pointer;">删除</button>' : '';
 
-  let isAIDiary = data.userId === AI_COMPANION_USER_ID || data.isAIDiary === true;
+  let isAIDiary = (data.userId === AI_COMPANION_USER_ID || String(data.userId).startsWith('char_')) || data.isAIDiary === true;
   let askAICommentBtn = !isAIDiary ? '<button id="askAICommentBtn" style="margin-top:20px;padding:10px 20px;background:var(--accent-light);border:1px solid var(--accent);border-radius:8px;color:var(--accent);cursor:pointer;font-size:14px;margin-left:10px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><rect x="3" y="11" width="18" height="10" rx="2"></rect><circle cx="12" cy="5" r="2"></circle><path d="M12 7v4"></path><line x1="8" y1="16" x2="8.01" y2="16"></line><line x1="16" y1="16" x2="16.01" y2="16"></line></svg>让ta评论</button>' : '';
 
   let likes = data.likes || [];
@@ -1119,7 +1121,7 @@ async function loadComments(diaryId) {
         let timeStr = time.getFullYear() + '.' + String(time.getMonth() + 1).padStart(2, '0') + '.' + String(time.getDate()).padStart(2, '0') + ' ' + String(time.getHours()).padStart(2, '0') + ':' + String(time.getMinutes()).padStart(2, '0');
         
         let displayName = comment.userDisplayName || '匿名';
-        if (comment.userId === AI_COMPANION_USER_ID && !displayName.includes('🤖')) displayName += ' 🤖';
+        if ((comment.userId === AI_COMPANION_USER_ID || String(comment.userId).startsWith('char_')) && !displayName.includes('🤖')) displayName += ' 🤖';
         
         let commentAuthorInfo = { userId: comment.userId, displayName: comment.userDisplayName, avatarUrl: comment.userAvatar };
         let avatarHtml = renderUserAvatar(commentAuthorInfo, 32);
@@ -1127,7 +1129,7 @@ async function loadComments(diaryId) {
         let canDelete = currentUser.uid === diaryOwnerId || 
                         currentUser.uid === comment.userId || 
                         diaryCoAuthors.indexOf(currentUser.uid) !== -1 ||
-                        (comment.userId === AI_COMPANION_USER_ID && comment.aiCreatorId === currentUser.uid);
+                        ((comment.userId === AI_COMPANION_USER_ID || String(comment.userId).startsWith('char_')) && comment.aiCreatorId === currentUser.uid);
 
         let item = document.createElement('div');
         item.className = 'comment-item';
@@ -1315,7 +1317,7 @@ async function addComment(diaryId, content, parentCommentId, authorId, authorDis
       commentData.audioText = audioText;
     }
 
-    if (authorId === AI_COMPANION_USER_ID) {
+    if (authorId === AI_COMPANION_USER_ID || String(authorId).startsWith('char_')) {
       commentData.aiCreatorId = currentUser.uid;
     }
 
@@ -1336,8 +1338,8 @@ async function addComment(diaryId, content, parentCommentId, authorId, authorDis
         let targetUserId = pDoc.data().userId;
         sendNotification(targetUserId, 'reply', diaryId, parentCommentId, '回复了你的评论: ' + content, actualAuthorId, authorDisplayName, authorAvatar);
         // 彩蛋：当用户回复了 AI 的评论，AI 自动进行回帖！
-        if (targetUserId === AI_COMPANION_USER_ID && actualAuthorId !== AI_COMPANION_USER_ID) {
-           triggerAIReplyToComment(diaryId, newCommentRef.id, content);
+        if ((targetUserId === AI_COMPANION_USER_ID || String(targetUserId).startsWith('char_')) && actualAuthorId !== AI_COMPANION_USER_ID && !String(actualAuthorId).startsWith('char_')) {
+           triggerAIReplyToComment(diaryId, newCommentRef.id, content, targetUserId);
         }
       }
     } else if (diaryOwnerId !== actualAuthorId) {
@@ -1350,13 +1352,13 @@ async function addComment(diaryId, content, parentCommentId, authorId, authorDis
 }
 
 // AI 自动回复用户的评论互动
-async function triggerAIReplyToComment(diaryId, targetCommentId, userContent) {
+async function triggerAIReplyToComment(diaryId, targetCommentId, userContent, aiCharId) {
   try {
     const aiConfig = currentUserData.aiConfig || {};
     if (!aiConfig.enabled) return;
 
     const activeApi = (aiConfig.apis || []).find(a => a.id === aiConfig.activeApiId) || (aiConfig.apis || [])[0];
-    const activeChar = (aiConfig.chars || []).find(c => c.id === aiConfig.activeCharId) || (aiConfig.chars || [])[0];
+    const activeChar = aiCharId ? ((aiConfig.chars || []).find(c => c.id === aiCharId) || (aiConfig.chars || [])[0]) : ((aiConfig.chars || []).find(c => c.id === aiConfig.activeCharId) || (aiConfig.chars || [])[0]);
     if (!activeApi || !activeApi.key || !activeChar) return;
 
     const activePersona = activeChar.boundPersonaId ? (aiConfig.personas || []).find(p => p.id === activeChar.boundPersonaId) : null;
@@ -1382,6 +1384,7 @@ async function triggerAIReplyToComment(diaryId, targetCommentId, userContent) {
     }
 
     finalPrompt += '\n\n【核心任务】主人在日记评论区回复了你的留言。请你自然地回复主人，字数50字以内，口吻随意亲切。';
+    finalPrompt += '\n\n【强制思维链指令】在给出最终回复前，你必须先进行思考。请将思考过程严格放在 <think> 和 </think> 标签内。思考结束后，再输出最终指定的回复内容。';
 
     const response = await fetch(apiUrl, {
       method: 'POST',
@@ -1399,7 +1402,7 @@ async function triggerAIReplyToComment(diaryId, targetCommentId, userContent) {
 
     if (!response.ok) return;
     const data = await response.json();
-    let aiResponseText = data.choices[0].message.content.trim();
+    let aiResponseText = data.choices[0].message.content.replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, '').trim();
 
     let audioUrl = null;
     let wantsVoice = false;
@@ -1417,7 +1420,7 @@ async function triggerAIReplyToComment(diaryId, targetCommentId, userContent) {
     if (activeChar.ttsEnabled && activeChar.ttsApiKey && wantsVoice && aiResponseText.length > 0) {
         try { audioUrl = await window.generateAIVoice(aiResponseText, activeChar); } catch(e) { console.error("AI Voice failed:", e); aiResponseText += `\n[系统提示：语音生成失败 (${e.message})]`; }
     }
-    await addComment(diaryId, aiResponseText, targetCommentId, AI_COMPANION_USER_ID, aiPersonaName, activeChar.avatar || '🤖', audioUrl, aiResponseText);
+    await addComment(diaryId, aiResponseText, targetCommentId, activeChar.id, aiPersonaName, activeChar.avatar || '🤖', audioUrl, aiResponseText);
     
     if (typeof loadComments === 'function' && window.currentDiaryIdForComment === diaryId) {
        loadComments(diaryId);
@@ -1464,7 +1467,7 @@ async function extractAndSaveMemory(newContent) {
 
     // 2. 缓冲池满了，生成一条短期记忆
     const bufferContent = activeChar.interactionBuffer.map((t, i) => `[记录${i+1}]: ${t}`).join('\n');
-    const systemPrompt = "你是一个记忆提炼引擎。请阅读用户的近期动态，合并提取出1-2句话的简短核心事实。以无序列表格式输出（例如：“- 主人最近去看了演唱会并吃了火锅”）。绝对禁止输出任何多余的废话。如果毫无意义，请直接回复“无”";
+    const systemPrompt = "你是一个记忆提炼引擎。请阅读用户的近期动态，合并提取出1-2句话的简短核心事实。以无序列表格式输出（例如：“- 主人最近去看了演唱会并吃了火锅”）。绝对禁止输出任何多余的废话。如果毫无意义，请直接回复“无”\n\n【强制思维链指令】在给出结果前，请先将思考过程放在 <think> 和 </think> 标签内。";
     const userMessage = `【近期动态】\n${bufferContent}\n\n请提炼：`;
 
     const response = await fetch(apiUrl, {
@@ -1475,7 +1478,7 @@ async function extractAndSaveMemory(newContent) {
 
     if (!response.ok) return;
     const data = await response.json();
-    const newMemory = data.choices[0].message.content.trim();
+    const newMemory = data.choices[0].message.content.replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, '').trim();
 
     activeChar.interactionBuffer = []; // 清空缓冲池
 
@@ -1487,10 +1490,10 @@ async function extractAndSaveMemory(newContent) {
       
       // 3. 如果短期记忆条数达到了 b 条，触发大清洗
       if (shortLines.length >= archiveThreshold) {
-        const archiveSys = "你是一个长线剧情归档引擎。请将【近期记忆】融入【旧归档】中，输出一份连贯的、第三人称的剧情总结。删减无用的日常流水账，仅保留事件脉络和感情发展。字数尽量精简。";
+        const archiveSys = "你是一个长线剧情归档引擎。请将【近期记忆】融入【旧归档】中，输出一份连贯的、第三人称的剧情总结。删减无用的日常流水账，仅保留事件脉络和感情发展。字数尽量精简。\n\n【强制思维链指令】在给出结果前，请先将思考过程放在 <think> 和 </think> 标签内。";
         const archiveUser = `【旧归档】\n${activeChar.archivedMemory || '无'}\n\n【近期记忆】\n${activeChar.shortTermMemory}\n\n请输出更新后的归档：`;
         
-        const coreSys = "你是一个核心记忆提取器。阅读【近期记忆】，如果你发现了主人极其强烈的喜好、雷区、或者是你们之间确立的重大约定，请将其提取并与【旧核心记忆】合并。如果没有此类重大事件，请原样返回旧核心记忆。保持绝对精简。";
+        const coreSys = "你是一个核心记忆提取器。阅读【近期记忆】，如果你发现了主人极其强烈的喜好、雷区、或者是你们之间确立的重大约定，请将其提取并与【旧核心记忆】合并。如果没有此类重大事件，请原样返回旧核心记忆。保持绝对精简。\n\n【强制思维链指令】在给出结果前，请先将思考过程放在 <think> 和 </think> 标签内。";
         const coreUser = `【旧核心记忆】\n${activeChar.coreMemory || '无'}\n\n【近期记忆】\n${activeChar.shortTermMemory}\n\n请输出更新后的核心记忆：`;
 
         // 并行发起两个请求 (严格使用副API)
@@ -1502,8 +1505,8 @@ async function extractAndSaveMemory(newContent) {
         if (archiveRes.ok && coreRes.ok) {
           const archiveData = await archiveRes.json();
           const coreData = await coreRes.json();
-          activeChar.archivedMemory = archiveData.choices[0].message.content.trim();
-          activeChar.coreMemory = coreData.choices[0].message.content.trim();
+          activeChar.archivedMemory = archiveData.choices[0].message.content.replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, '').trim();
+          activeChar.coreMemory = coreData.choices[0].message.content.replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, '').trim();
           activeChar.shortTermMemory = '';
         }
       }
@@ -1602,7 +1605,7 @@ async function askAIToComment(diaryId, diaryContent, imageUrls = [], diaryOwnerI
 
     const systemMessage = {
       role: "system",
-      content: finalPrompt
+      content: finalPrompt + '\n\n【强制思维链指令】在给出最终回复前，你必须先进行思考。请将思考过程严格放在 <think> 和 </think> 标签内。思考结束后，再输出最终的回复内容。'
     };
 
     // 辨别日记主人身份
@@ -1655,7 +1658,7 @@ async function askAIToComment(diaryId, diaryContent, imageUrls = [], diaryOwnerI
     }
 
     const data = await response.json();
-    let aiCommentContent = data.choices[0].message.content.trim();
+    let aiCommentContent = data.choices[0].message.content.replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, '').trim();
 
     let audioUrl = null;
     let wantsVoice = false;
@@ -1673,7 +1676,7 @@ async function askAIToComment(diaryId, diaryContent, imageUrls = [], diaryOwnerI
     if (activeChar.ttsEnabled && activeChar.ttsApiKey && wantsVoice && aiCommentContent.length > 0) {
         try { audioUrl = await window.generateAIVoice(aiCommentContent, activeChar); } catch(e) { console.error("AI Voice failed:", e); aiCommentContent += `\n[系统提示：语音生成失败 (${e.message})]`; }
     }
-    await addComment(diaryId, aiCommentContent, null, AI_COMPANION_USER_ID, aiPersonaName, activeChar.avatar || '🤖', audioUrl, aiCommentContent);
+    await addComment(diaryId, aiCommentContent, null, activeChar.id, aiPersonaName, activeChar.avatar || '🤖', audioUrl, aiCommentContent);
 
     loadComments(diaryId); // 重新加载评论列表
   } catch (e) {
@@ -1763,7 +1766,7 @@ window.generateAIVoice = async function(text, charConfig) {
 };
 
 // 主动触发 AI 写日记 (纯前端 RP 引擎)
-async function triggerAIPostDiary(btnElement, isSilent = false) {
+async function triggerAIPostDiary(btnElement, isSilent = false, specificCharId = null) {
   if (btnElement) {
     btnElement.disabled = true;
     btnElement.innerHTML = '⏳...';
@@ -1779,7 +1782,7 @@ async function triggerAIPostDiary(btnElement, isSilent = false) {
     }
 
     const activeApi = (aiConfig.apis || []).find(a => a.id === aiConfig.activeApiId) || (aiConfig.apis || [])[0] || {};
-    const activeChar = (aiConfig.chars || []).find(c => c.id === aiConfig.activeCharId) || (aiConfig.chars || [])[0] || {};
+    const activeChar = specificCharId ? ((aiConfig.chars || []).find(c => c.id === specificCharId) || (aiConfig.chars || [])[0]) : ((aiConfig.chars || []).find(c => c.id === aiConfig.activeCharId) || (aiConfig.chars || [])[0] || {});
     const activePersona = activeChar.boundPersonaId ? (aiConfig.personas || []).find(p => p.id === activeChar.boundPersonaId) : null;
 
     const enabledWorldbooks = (aiConfig.worldbooks || []).filter(w => w.isEnabled && (w.isGlobal || w.boundCharId === activeChar.id));
@@ -1827,7 +1830,7 @@ async function triggerAIPostDiary(btnElement, isSilent = false) {
 
     const systemMessage = {
       role: "system",
-      content: finalPrompt + "\n\n【核心任务】你现在需要主动发布一篇属于你自己的生活动态。你是一个有独立生活、真实思想和个人审美的个体，绝对不要像个 AI 或毫无主见的跟班一样总是围绕着“主人”转！你可以分享自己今天看到的风景、听到的一首歌、看书的感悟、或者是突然的一个脑洞。字数控制在 50~150 字左右，情感自然真实，不要带有任何“回复消息”的口吻。\n\n【关于音乐分享】当且仅当你今天的动态主题非常明确（如雨天、深夜、或特定的强烈情绪），并且你恰好联想到了一首极度契合的真实存在的歌曲时，才可以在 JSON 中添加 \"musicUrl\" 字段（格式：“歌手名《歌曲名》”）。为了保持惊喜感，**绝对不要频繁分享音乐（概率控制在 20% 左右即可）**。\n\n请严格返回 JSON 格式，不要包含其他解释，格式如下：\n{\n  \"title\": \"一个简短的标题(10字内)\",\n  \"content\": \"动态的正文内容\",\n  \"musicUrl\": \"(可选)歌手《歌名》\"\n}"
+      content: finalPrompt + "\n\n【核心任务】你现在需要主动发布一篇属于你自己的生活动态。你是一个有独立生活、真实思想和个人审美的个体，绝对不要像个 AI 或毫无主见的跟班一样总是围绕着“主人”转！你可以分享自己今天看到的风景、听到的一首歌、看书的感悟、或者是突然的一个脑洞。字数控制在 50~150 字左右，情感自然真实，不要带有任何“回复消息”的口吻。\n\n【关于音乐分享】当且仅当你今天的动态主题非常明确（如雨天、深夜、或特定的强烈情绪），并且你恰好联想到了一首极度契合的真实存在的歌曲时，才可以在 JSON 中添加 \"musicUrl\" 字段（格式：“歌手名《歌曲名》”）。为了保持惊喜感，**绝对不要频繁分享音乐（概率控制在 20% 左右即可）**。\n\n请严格返回 JSON 格式，不要包含其他解释，格式如下：\n{\n  \"title\": \"一个简短的标题(10字内)\",\n  \"content\": \"动态的正文内容\",\n  \"musicUrl\": \"(可选)歌手《歌名》\"\n}\n\n【强制思维链指令】在输出JSON之前，你必须先进行思考，并将思考过程严格放在 <think> 和 </think> 标签内！只有在 </think> 闭合标签之后，才能输出纯 JSON。"
     };
 
     const response = await fetch(apiUrl, {
@@ -1842,7 +1845,7 @@ async function triggerAIPostDiary(btnElement, isSilent = false) {
 
     if (!response.ok) throw new Error('AI API Error');
     const data = await response.json();
-    const aiContent = data.choices[0].message.content.trim();
+    const aiContent = data.choices[0].message.content.replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, '').trim();
 
     let diaryTitle = '';
     let diaryBody = aiContent;
@@ -1873,7 +1876,7 @@ async function triggerAIPostDiary(btnElement, isSilent = false) {
 
     // AI 发布的日记，userId 是本人（currentUser.uid），用 isAIDiary 标记是 AI 发布的
     let aiDiaryData = {
-      title: diaryTitle, content: diaryBody, date: dateObj, time: String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0'), mood: randomMood, visibility: 'shared', sharedWith: [currentUser.uid], userId: currentUser.uid, isAIDiary: true, aiPersonaName: aiPersonaName, createdAt: firebase.firestore.FieldValue.serverTimestamp(), updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      title: diaryTitle, content: diaryBody, date: dateObj, time: String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0'), mood: randomMood, visibility: 'shared', sharedWith: [currentUser.uid], userId: currentUser.uid, isAIDiary: true, aiPersonaName: aiPersonaName, aiCharId: activeChar.id, createdAt: firebase.firestore.FieldValue.serverTimestamp(), updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     };
     if (diaryMusicUrl) aiDiaryData.musicUrl = diaryMusicUrl;
     if (diaryAudioUrl) {
@@ -1884,7 +1887,7 @@ async function triggerAIPostDiary(btnElement, isSilent = false) {
     let newDiaryRef = await db.collection('diaries').add(aiDiaryData);
     // 给主人发送铃铛小红点通知
     if (typeof sendNotification === 'function') {
-      sendNotification(currentUser.uid, 'post', newDiaryRef.id, null, '发布了新动态', AI_COMPANION_USER_ID, aiPersonaName, activeChar.avatar || '🤖');
+      sendNotification(currentUser.uid, 'post', newDiaryRef.id, null, '发布了新动态', activeChar.id, aiPersonaName, activeChar.avatar || '🤖');
     }
 
     loadDiaries(); // 刷新时间线
@@ -2403,6 +2406,9 @@ async function runAIHeartbeatTick() {
   if (!currentUser || !currentUserData) return;
   let aiConfig = currentUserData.aiConfig || {};
   if (!aiConfig.enabled) return;
+  let chars = aiConfig.chars || [];
+  if (chars.length === 0) return;
+  let randomChar = chars[Math.floor(Math.random() * chars.length)];
 
   try {
     // 1. 嗅探主人是否刚刚发布了新鲜动态（5分钟内）
@@ -2423,8 +2429,8 @@ async function runAIHeartbeatTick() {
           let timeDiff = Date.now() - data.createdAt.toMillis();
           if (timeDiff < 5 * 60 * 1000) { // 5分钟内的动态属于“新鲜”
             let likes = data.likes || [];
-            let isLiked = likes.includes(AI_COMPANION_USER_ID);
-            let commentsSnap = await db.collection('comments').where('diaryId', '==', doc.id).where('userId', '==', AI_COMPANION_USER_ID).get();
+            let isLiked = likes.includes(AI_COMPANION_USER_ID) || likes.includes(randomChar.id);
+            let commentsSnap = await db.collection('comments').where('diaryId', '==', doc.id).where('userId', 'in', [AI_COMPANION_USER_ID, randomChar.id]).get();
             let isCommented = !commentsSnap.empty;
             
             if (!isLiked || !isCommented) {
@@ -2442,28 +2448,28 @@ async function runAIHeartbeatTick() {
       // 【情况1：秒回/秒赞模式】检测到新鲜动态，极高概率立刻互动
       console.log("[AI Heartbeat] 嗅探到新鲜动态！触发高频互动模式...");
       if (!freshDocInfo.isCommented && dice < 0.45) { // 45%概率秒回评论
-        await triggerAutonomousAIComment();
+        await triggerAutonomousAIComment(randomChar.id);
       } else if (!freshDocInfo.isLiked && dice >= 0.45 && dice < 0.85) { // 40%概率秒赞
-        await triggerAutonomousAILike();
+        await triggerAutonomousAILike(randomChar.id);
       }
     } else {
       // 【情况2：日常潜水模式】大幅降低动作频率，极力避免话痨
       if (dice < 0.02) {
         // 2% 概率：突然翻老日记评论 (平均每50分钟概率触发一次)
         console.log("[AI Heartbeat] 闲逛中：尝试自主评论...");
-        await triggerAutonomousAIComment();
+        await triggerAutonomousAIComment(randomChar.id);
       } else if (dice >= 0.02 && dice < 0.05) {
         // 3% 概率：翻老日记点赞
         console.log("[AI Heartbeat] 闲逛中：尝试自主点赞...");
-        await triggerAutonomousAILike();
+        await triggerAutonomousAILike(randomChar.id);
       } else if (dice >= 0.05 && dice < 0.055) {
         // 0.5% 概率：审视并设立纪念日
         console.log("[AI Heartbeat] 整理思绪：检视记忆，尝试设立纪念日...");
-        await triggerAutonomousAIAnniversary();
+        await triggerAutonomousAIAnniversary(randomChar.id);
       } else if (dice > 0.995) {
         // 0.5% 概率：自主发日记 (平均挂机在线几小时才可能憋出一篇)
         console.log("[AI Heartbeat] 灵光一闪：自主发布独立生活动态...");
-        await triggerAIPostDiary(null, true);
+        await triggerAIPostDiary(null, true, randomChar.id);
       } else {
         console.log("[AI Heartbeat] 骰子未命中，安静潜水...");
       }
@@ -2473,7 +2479,7 @@ async function runAIHeartbeatTick() {
   }
 }
 
-async function triggerAutonomousAIComment() {
+async function triggerAutonomousAIComment(charId) {
   try {
     let aiConfig = currentUserData.aiConfig || {};
     const activeApi = (aiConfig.apis || []).find(a => a.id === aiConfig.activeApiId) || (aiConfig.apis || [])[0];
@@ -2501,7 +2507,7 @@ async function triggerAutonomousAIComment() {
       let otherComments = [];
       commentsSnapshot.forEach(c => {
          let cData = c.data();
-         if (cData.userId === AI_COMPANION_USER_ID) {
+         if (cData.userId === AI_COMPANION_USER_ID || String(cData.userId).startsWith('char_')) {
            hasAIComment = true;
          } else if (cData.userId !== currentUser.uid) {
            otherComments.push({ id: c.id, data: cData });
@@ -2517,7 +2523,7 @@ async function triggerAutonomousAIComment() {
         } else {
            console.log("[AI Heartbeat] 找到未评论日记，正在构思回复...");
         }
-            await generateAndPostAIComment(doc.id, diaryData.content, urls, aiConfig, activeApi, targetComment, diaryData.audioText);
+            await generateAndPostAIComment(doc.id, diaryData.content, urls, aiConfig, activeApi, targetComment, diaryData.audioText, charId);
         break;
       }
     }
@@ -2526,7 +2532,7 @@ async function triggerAutonomousAIComment() {
   }
 }
 
-async function triggerAutonomousAILike() {
+async function triggerAutonomousAILike(charId) {
   try {
     let aiConfig = currentUserData.aiConfig || {};
     if (!aiConfig.enabled) return;
@@ -2545,18 +2551,18 @@ async function triggerAutonomousAILike() {
       let likes = diaryData.likes || [];
       
       // 如果 AI 还没点过赞
-      if (!likes.includes(AI_COMPANION_USER_ID)) {
+      if (!likes.includes(charId) && !likes.includes(AI_COMPANION_USER_ID)) {
         console.log(`[AI Heartbeat] 正在为日记 ${doc.id} 点赞...`);
         await db.collection('diaries').doc(doc.id).update({
-          likes: firebase.firestore.FieldValue.arrayUnion(AI_COMPANION_USER_ID)
+          likes: firebase.firestore.FieldValue.arrayUnion(charId)
         });
         
-        let activeChar = (aiConfig.chars || []).find(c => c.id === aiConfig.activeCharId) || (aiConfig.chars || [])[0] || {};
+        let activeChar = (aiConfig.chars || []).find(c => c.id === charId) || (aiConfig.chars || [])[0] || {};
         let aiPersonaName = (activeChar.name || '神秘的ta') + ' 🤖';
         let aiAvatar = activeChar.avatar || '🤖';
         
         if (typeof sendNotification === 'function') {
-          sendNotification(currentUser.uid, 'like', doc.id, null, '赞了你的记录', AI_COMPANION_USER_ID, aiPersonaName, aiAvatar);
+          sendNotification(currentUser.uid, 'like', doc.id, null, '赞了你的记录', charId, aiPersonaName, aiAvatar);
         }
         
         if (typeof loadDiaries === 'function') loadDiaries();
@@ -2568,7 +2574,7 @@ async function triggerAutonomousAILike() {
   }
 }
 
-async function triggerAutonomousAIAnniversary() {
+async function triggerAutonomousAIAnniversary(charId) {
   try {
     let aiConfig = currentUserData.aiConfig || {};
     if (!aiConfig.enabled) return;
@@ -2585,7 +2591,7 @@ async function triggerAutonomousAIAnniversary() {
         }
     });
 
-    const activeChar = (aiConfig.chars || []).find(c => c.id === aiConfig.activeCharId) || (aiConfig.chars || [])[0] || {};
+    const activeChar = (aiConfig.chars || []).find(c => c.id === charId) || (aiConfig.chars || [])[0] || {};
     const activePersona = activeChar.boundPersonaId ? (aiConfig.personas || []).find(p => p.id === activeChar.boundPersonaId) : null;
     const enabledWorldbooks = (aiConfig.worldbooks || []).filter(w => w.isEnabled && (w.isGlobal || w.boundCharId === activeChar.id));
     let wbText = enabledWorldbooks.map(w => `- ${w.content}`).join('\n');
@@ -2600,7 +2606,7 @@ async function triggerAutonomousAIAnniversary() {
     if (wbText) finalPrompt += '\n\n【世界设定】\n' + wbText;
     if (activeChar.coreMemory) finalPrompt += '\n\n【核心记忆】\n' + activeChar.coreMemory;
 
-    let systemContent = finalPrompt + `\n\n【核心任务】\n你现在有能力为主人主动设立一个“专属纪念日”。\n请仔细审视上方的【过往经历】和【核心记忆】中是否有一个极其重要、并且带有明确日期的事件（例如主人的生日、某个重大约定日或极具意义的一天）。\n已知主人当前日历上已有的纪念日包括：[${existingTitles.join(', ')}]，请绝对不要重复设立！\n\n如果你认为有一个新的、非常值得纪念的明确日期，请严格输出纯 JSON 格式（不要包含任何 markdown 符号或额外解释，直接以大括号开头）：\n{\n  "title": "纪念日名称(如：主人的生日)",\n  "date": "YYYY-MM-DD",\n  "icon": "💝",\n  "celebrationText": "一句简短走心的全屏庆祝语"\n}\n\n如果没有找到足够重要且明确的日期，或者觉得目前不需要新增，请直接回复："无"`;
+    let systemContent = finalPrompt + `\n\n【核心任务】\n你现在有能力为主人主动设立一个“专属纪念日”。\n请仔细审视上方的【过往经历】和【核心记忆】中是否有一个极其重要、并且带有明确日期的事件（例如主人的生日、某个重大约定日或极具意义的一天）。\n已知主人当前日历上已有的纪念日包括：[${existingTitles.join(', ')}]，请绝对不要重复设立！\n\n如果你认为有一个新的、非常值得纪念的明确日期，请严格输出纯 JSON 格式（不要包含任何 markdown 符号或额外解释，直接以大括号开头）：\n{\n  "title": "纪念日名称(如：主人的生日)",\n  "date": "YYYY-MM-DD",\n  "icon": "💝",\n  "celebrationText": "一句简短走心的全屏庆祝语"\n}\n\n如果没有找到足够重要且明确的日期，或者觉得目前不需要新增，请直接回复："无"\n\n【强制思维链指令】在输出JSON或“无”之前，你必须先进行思考，并将思考过程严格放在 <think> 和 </think> 标签内！只有在 </think> 闭合标签之后，才能输出最终结果。`;
 
     const response = await fetch(apiUrl, {
       method: 'POST',
@@ -2610,7 +2616,7 @@ async function triggerAutonomousAIAnniversary() {
 
     if (!response.ok) return;
     const data = await response.json();
-    const aiResponseText = data.choices[0].message.content.trim();
+    const aiResponseText = data.choices[0].message.content.replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, '').trim();
 
     if (aiResponseText === '无' || !aiResponseText.startsWith('{')) {
         console.log("[AI Heartbeat] AI 审阅了记忆，认为目前不需要新增纪念日。");
@@ -2622,11 +2628,11 @@ async function triggerAutonomousAIAnniversary() {
         let aiPersonaName = (activeChar.name || '神秘的ta') + ' 🤖';
         let aiAvatar = activeChar.avatar || '🤖';
         
-        await db.collection('anniversaries').add({ userId: AI_COMPANION_USER_ID, title: annData.title, date: annData.date, icon: annData.icon || '🌟', celebrationText: annData.celebrationText || '', isRepeating: true, visibility: 'co-authored', coAuthors: [currentUser.uid], acceptedCoAuthors: [currentUser.uid], createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+        await db.collection('anniversaries').add({ userId: charId, title: annData.title, date: annData.date, icon: annData.icon || '🌟', celebrationText: annData.celebrationText || '', isRepeating: true, visibility: 'co-authored', coAuthors: [currentUser.uid], acceptedCoAuthors: [currentUser.uid], createdAt: firebase.firestore.FieldValue.serverTimestamp() });
         console.log(`[AI Heartbeat] 成功设立纪念日: ${annData.title}`);
 
         if (typeof sendNotification === 'function') {
-            sendNotification(currentUser.uid, 'anniversary', null, null, `悄悄为你设立了一个专属纪念日：${annData.title}`, AI_COMPANION_USER_ID, aiPersonaName, aiAvatar);
+            sendNotification(currentUser.uid, 'anniversary', null, null, `悄悄为你设立了一个专属纪念日：${annData.title}`, charId, aiPersonaName, aiAvatar);
         }
         if (typeof loadAnniversaries === 'function' && !document.getElementById('anniversaryView').classList.contains('hidden')) loadAnniversaries();
         if (typeof refreshCalendar === 'function') refreshCalendar();
@@ -2636,8 +2642,8 @@ async function triggerAutonomousAIAnniversary() {
   }
 }
 
-async function generateAndPostAIComment(diaryId, diaryContent, imageUrls, aiConfig, activeApi, targetComment = null, audioText = null) {
-  const activeChar = (aiConfig.chars || []).find(c => c.id === aiConfig.activeCharId) || (aiConfig.chars || [])[0] || {};
+async function generateAndPostAIComment(diaryId, diaryContent, imageUrls, aiConfig, activeApi, targetComment = null, audioText = null, specificCharId = null) {
+  const activeChar = specificCharId ? ((aiConfig.chars || []).find(c => c.id === specificCharId) || (aiConfig.chars || [])[0]) : ((aiConfig.chars || []).find(c => c.id === aiConfig.activeCharId) || (aiConfig.chars || [])[0] || {});
   const activePersona = activeChar.boundPersonaId ? (aiConfig.personas || []).find(p => p.id === activeChar.boundPersonaId) : null;
   const enabledWorldbooks = (aiConfig.worldbooks || []).filter(w => w.isEnabled && (w.isGlobal || w.boundCharId === activeChar.id));
   let wbText = enabledWorldbooks.map(w => `- ${w.content}`).join('\n');
@@ -2669,7 +2675,7 @@ async function generateAndPostAIComment(diaryId, diaryContent, imageUrls, aiConf
       finalPrompt += '\n\n【!!!最高物理权限覆盖!!!】你的文本输出端直连了TTS语音引擎！你可以自由决定回复是纯文字、纯语音，还是语音和文字交替穿插，完全根据当前的聊天氛围自主决定！\n【必须严格遵守的输出格式】\n为了让系统正确解析，你的回复**必须极其严格地以 `[发送文字]:` 或 `[发送语音]:` 开头**。\n例如：\n[发送文字]: 哇，这张照片拍得真好！\n[发送语音]: 我好想和你一起去那里玩呀~\n绝对禁止回答“我是AI发不了语音”！';
   }
 
-  const systemMessage = { role: "system", content: finalPrompt };
+  const systemMessage = { role: "system", content: finalPrompt + '\n\n【强制思维链指令】在给出最终回复前，你必须先进行思考。请将思考过程严格放在 <think> 和 </think> 标签内。思考结束后，再输出最终的回复内容。' };
 
   let safeContent = diaryContent || '分享了照片';
   if (audioText) {
@@ -2704,7 +2710,7 @@ async function generateAndPostAIComment(diaryId, diaryContent, imageUrls, aiConf
 
   if (!response.ok) throw new Error('API Error');
   const data = await response.json();
-  let aiCommentContent = data.choices[0].message.content.trim();
+  let aiCommentContent = data.choices[0].message.content.replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, '').trim();
 
   const parentId = targetComment ? targetComment.id : null;
   let audioUrl = null;
@@ -2723,7 +2729,7 @@ async function generateAndPostAIComment(diaryId, diaryContent, imageUrls, aiConf
   if (activeChar.ttsEnabled && activeChar.ttsApiKey && wantsVoice && aiCommentContent.length > 0) {
       try { audioUrl = await window.generateAIVoice(aiCommentContent, activeChar); } catch(e) { console.error("AI Voice failed:", e); aiCommentContent += `\n[系统提示：语音生成失败 (${e.message})]`; }
   }
-  await addComment(diaryId, aiCommentContent, parentId, AI_COMPANION_USER_ID, aiPersonaName, activeChar.avatar || '🤖', audioUrl, aiCommentContent);
+  await addComment(diaryId, aiCommentContent, parentId, activeChar.id, aiPersonaName, activeChar.avatar || '🤖', audioUrl, aiCommentContent);
   
   // 如果当前正好在看这篇日记，无缝刷新评论区
   if (typeof loadComments === 'function' && window.currentDiaryIdForComment === diaryId) {
@@ -2778,7 +2784,13 @@ async function getAIChatResponse(conversationId, btnElement) {
             }
         });
 
-        const activeChar = (aiConfig.chars || []).find(c => c.id === aiConfig.activeCharId) || (aiConfig.chars || [])[0] || {};
+        const otherUserId = conversationId.replace(currentUser.uid, '').replace('_', '');
+        let activeChar;
+        if (String(otherUserId).startsWith('char_')) {
+            activeChar = (aiConfig.chars || []).find(c => c.id === otherUserId) || (aiConfig.chars || [])[0] || {};
+        } else {
+            activeChar = (aiConfig.chars || []).find(c => c.id === aiConfig.activeCharId) || (aiConfig.chars || [])[0] || {};
+        }
         const activePersona = activeChar.boundPersonaId ? (aiConfig.personas || []).find(p => p.id === activeChar.boundPersonaId) : null;
         const enabledWorldbooks = (aiConfig.worldbooks || []).filter(w => w.isEnabled && (w.isGlobal || w.boundCharId === activeChar.id));
         let wbText = enabledWorldbooks.map(w => `- ${w.content}`).join('\n');
@@ -2826,7 +2838,7 @@ async function getAIChatResponse(conversationId, btnElement) {
             finalPrompt += '\n\n【!!!最高物理权限覆盖!!!】你的文本输出端直连了TTS语音引擎！你可以自由决定回复是纯文字、纯语音，还是语音和文字交替穿插，完全根据当前的聊天氛围自主决定！\n【必须严格遵守的输出格式】\n为了让系统正确解析，你的每一行回复**必须极其严格地以 `[发送文字]:` 或 `[发送语音]:` 开头**。\n例如：\n[发送文字]: 知道啦知道啦！\n[发送语音]: 咳咳，我给你唱首歌吧，啦啦啦~\n[发送文字]: 唱得好听吗？\n绝对禁止回答“发不了语音”！';
         }
 
-        finalPrompt += '\n\n【核心任务】你正在和主人进行一对一私聊。请根据设定和聊天记录自然回复。\n【重要排版指令】\n1. 你的回复**必须拆分成2~4条极短的对话**！每句话占一行，严格使用换行符(\\n)隔开！\n2. 每行开头必须带有 `[发送文字]:` 或 `[发送语音]:` 标签！\n3. 绝对不要在回复中使用括号()、*等符号来描写动作表情，只输出纯文字或纯语音！';
+        finalPrompt += '\n\n【核心任务】你正在和主人进行一对一私聊。请根据设定和聊天记录自然回复。\n【重要排版指令】\n1. 你的回复**必须拆分成2~4条极短的对话**！每句话占一行，严格使用换行符(\\n)隔开！\n2. 每行开头必须带有 `[发送文字]:` 或 `[发送语音]:` 标签！\n3. 绝对不要在回复中使用括号()、*等符号来描写动作表情，只输出纯文字或纯语音！\n\n【强制思维链指令】在给出最终回复前，你必须先进行思考，分析当前的聊天氛围和用户的意图。请将思考过程严格放在 <think> 和 </think> 标签内！只有在 </think> 闭合标签之后，才能输出带有标签的最终对话！';
 
         const temperatureToUse = activeApi.temperature !== undefined ? activeApi.temperature : 0.7;
 
@@ -2843,7 +2855,7 @@ async function getAIChatResponse(conversationId, btnElement) {
             throw new Error(`大模型接口异常: ${errData.substring(0, 100)}`);
         }
         const data = await response.json();
-        let aiResponseText = data.choices[0].message.content.trim();
+        let aiResponseText = data.choices[0].message.content.replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, '').trim();
         if (!aiResponseText) aiResponseText = "...";
 
         const convRef = db.collection('conversations').doc(conversationId);
@@ -2851,6 +2863,7 @@ async function getAIChatResponse(conversationId, btnElement) {
         // 拟人化处理：按换行符切分为多条消息，并逐条延时发送
         const lines = aiResponseText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
         
+        const aiSenderId = String(otherUserId).startsWith('char_') ? otherUserId : AI_COMPANION_USER_ID;
         for (let i = 0; i < lines.length; i++) {
             let lineText = lines[i];
             
@@ -2881,9 +2894,9 @@ async function getAIChatResponse(conversationId, btnElement) {
 
             if (audioUrl) {
                 // 如果成功生成语音，原文字将作为字幕(audioText)展示，不作为独立文本(text)
-                await sendMessage(conversationId, null, true, AI_COMPANION_USER_ID, null, audioUrl, lineText);
+                await sendMessage(conversationId, null, true, aiSenderId, null, audioUrl, lineText);
             } else {
-                await sendMessage(conversationId, lineText, true, AI_COMPANION_USER_ID); 
+                await sendMessage(conversationId, lineText, true, aiSenderId); 
             }
             
             // 如果不是最后一条消息，根据下一句话的字数动态停顿，模拟真实打字速度
