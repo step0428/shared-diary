@@ -943,6 +943,7 @@ async function showDiaryDetail(diaryId, isMine, isCoAuthor) {
   let deleteBtnHtml = canEditOrDelete ? '<button id="deleteDiaryBtn" style="margin-top:20px;padding:10px 20px;background:rgba(255,100,100,0.2);border:1px solid rgba(255,100,100,0.4);border-radius:8px;color:#ff6b6b;cursor:pointer;">删除</button>' : '';
 
   let isAIDiary = (data.userId === AI_COMPANION_USER_ID || String(data.userId).startsWith('char_')) || data.isAIDiary === true;
+  let regenDiaryBtnHtml = (isAIDiary && isMine) ? '<button id="regenDiaryBtn" style="margin-top:20px;margin-right:10px;padding:10px 20px;background:var(--accent-light);border:1px solid var(--accent);border-radius:8px;color:var(--accent);cursor:pointer;" title="重新生成此条动态">🎲 重roll</button>' : '';
   let askAICommentBtn = !isAIDiary ? '<button id="askAICommentBtn" style="margin-top:20px;padding:10px 20px;background:var(--accent-light);border:1px solid var(--accent);border-radius:8px;color:var(--accent);cursor:pointer;font-size:14px;margin-left:10px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><rect x="3" y="11" width="18" height="10" rx="2"></rect><circle cx="12" cy="5" r="2"></circle><path d="M12 7v4"></path><line x1="8" y1="16" x2="8.01" y2="16"></line><line x1="16" y1="16" x2="16.01" y2="16"></line></svg>让ta评论</button>' : '';
 
   let likes = data.likes || [];
@@ -989,7 +990,18 @@ async function showDiaryDetail(diaryId, isMine, isCoAuthor) {
   }
 
   let contentEl = document.getElementById('diaryDetailContent');
-  contentEl.innerHTML = '<div class="diary-meta"><span>' + dateStr + '</span>' + authorHtml + '</div>' + titleHtml + tagHtml + '<div class="diary-detail-text">' + escapeHtml(data.content) + '</div>' + imageHtml + audioHtml + musicHtml + '<div style="margin-top:15px;display:flex;align-items:center;gap:10px;">' + likeBtnHtml + editBtnHtml + deleteBtnHtml + askAICommentBtn + '</div>';
+  contentEl.innerHTML = '<div class="diary-meta"><span>' + dateStr + '</span>' + authorHtml + '</div>' + titleHtml + tagHtml + '<div class="diary-detail-text">' + escapeHtml(data.content) + '</div>' + imageHtml + audioHtml + musicHtml + '<div style="margin-top:15px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">' + likeBtnHtml + regenDiaryBtnHtml + editBtnHtml + deleteBtnHtml + askAICommentBtn + '</div>';
+
+  if (document.getElementById('regenDiaryBtn')) {
+    document.getElementById('regenDiaryBtn').addEventListener('click', async function() {
+      if (confirm('确定要让ta重新思考并发布这条动态吗？\n(当前的动态及其评论将被彻底删除)')) {
+        let charId = data.aiCharId || AI_COMPANION_USER_ID;
+        document.getElementById('diaryModal').classList.add('hidden');
+        await deleteDiary(diaryId);
+        triggerAIPostDiary(null, false, charId);
+      }
+    });
+  }
 
   if (canEditOrDelete) {
     document.getElementById('editDiaryBtn').addEventListener('click', function() {
@@ -1008,6 +1020,7 @@ async function showDiaryDetail(diaryId, isMine, isCoAuthor) {
 
   if (document.getElementById('askAICommentBtn')) {
     let urls = data.imageUrls || (data.imageUrl ? [data.imageUrl] : []);
+    console.log('传给AI的urls:', urls);
     let audioTxt = data.audioText || null;
     document.getElementById('askAICommentBtn').addEventListener('click', function(e) {
       let chars = currentUserData.aiConfig.chars || [];
@@ -1131,12 +1144,16 @@ async function loadComments(diaryId) {
                         diaryCoAuthors.indexOf(currentUser.uid) !== -1 ||
                         ((comment.userId === AI_COMPANION_USER_ID || String(comment.userId).startsWith('char_')) && comment.aiCreatorId === currentUser.uid);
 
+        let isAIComment = (comment.userId === AI_COMPANION_USER_ID || String(comment.userId).startsWith('char_'));
+        let canRegen = isAIComment && comment.aiCreatorId === currentUser.uid;
+        let regenBtnHtml = canRegen ? '<button class="regen-comment-btn" data-id="' + doc.id + '" style="color:var(--accent);margin-left:8px;background:none;border:none;cursor:pointer;font-size:12px;">🎲重roll</button>' : '';
+
         let item = document.createElement('div');
         item.className = 'comment-item';
         item.dataset.commentId = doc.id;
         let audioHtml = comment.audioUrl ? '<div style="margin-top:8px;"><audio src="' + escapeHtml(comment.audioUrl) + '" controls style="width:100%;max-width:300px;height:36px;outline:none;border-radius:8px;"></audio></div>' : '';
         let audioTextHtml = (comment.audioUrl && comment.audioText) ? '<div style="font-size:13px;color:var(--text-muted);margin-top:4px;">[语音识别] ' + escapeHtml(comment.audioText) + '</div>' : '';
-        item.innerHTML = avatarHtml + '<div class="comment-body"><div class="comment-header"><span class="comment-author">' + escapeHtml(displayName) + '</span><span class="comment-time">' + timeStr + '</span></div><div class="comment-content">' + escapeHtml(comment.content) + audioHtml + audioTextHtml + '</div><div class="comment-actions"><button class="reply-btn" data-id="' + doc.id + '">回复</button>' + (canDelete ? '<button class="delete-comment-btn" data-id="' + doc.id + '">删除</button>' : '') + '</div></div>';
+        item.innerHTML = avatarHtml + '<div class="comment-body"><div class="comment-header"><span class="comment-author">' + escapeHtml(displayName) + '</span><span class="comment-time">' + timeStr + '</span></div><div class="comment-content">' + escapeHtml(comment.content) + audioHtml + audioTextHtml + '</div><div class="comment-actions"><button class="reply-btn" data-id="' + doc.id + '">回复</button>' + regenBtnHtml + (canDelete ? '<button class="delete-comment-btn" data-id="' + doc.id + '">删除</button>' : '') + '</div></div>';
         return item;
       }
 
@@ -1287,6 +1304,15 @@ async function loadComments(diaryId) {
       let commentId = this.dataset.id;
       if (confirm('确定删除这条评论吗？')) {
         await deleteComment(commentId);
+      }
+    };
+  });
+
+  document.querySelectorAll('.regen-comment-btn').forEach(function(btn) {
+    btn.onclick = async function() {
+      let commentId = this.dataset.id;
+      if (typeof regenerateAIComment === 'function') {
+        regenerateAIComment(commentId, currentDiaryIdForComment);
       }
     };
   });
@@ -1467,7 +1493,7 @@ async function extractAndSaveMemory(newContent) {
 
     // 2. 缓冲池满了，生成一条短期记忆
     const bufferContent = activeChar.interactionBuffer.map((t, i) => `[记录${i+1}]: ${t}`).join('\n');
-    const systemPrompt = "你是一个记忆提炼引擎。请阅读用户的近期动态，合并提取出1-2句话的简短核心事实。以无序列表格式输出（例如：“- 主人最近去看了演唱会并吃了火锅”）。绝对禁止输出任何多余的废话。如果毫无意义，请直接回复“无”\n\n【强制思维链指令】在给出结果前，请先将思考过程放在 <think> 和 </think> 标签内。";
+    const systemPrompt = "你是一个记忆提炼引擎。请阅读用户的近期动态，合并提取出1-2句话的简短核心事实。以无序列表格式输出。绝对禁止输出任何多余的废话。\n\n【强制输出格式】请严格遵循以下排版：\n<think>\n你的提炼思考过程...\n</think>\n最终提取的记忆结果（或直接回复“无”）";
     const userMessage = `【近期动态】\n${bufferContent}\n\n请提炼：`;
 
     const response = await fetch(apiUrl, {
@@ -1490,10 +1516,10 @@ async function extractAndSaveMemory(newContent) {
       
       // 3. 如果短期记忆条数达到了 b 条，触发大清洗
       if (shortLines.length >= archiveThreshold) {
-        const archiveSys = "你是一个长线剧情归档引擎。请将【近期记忆】融入【旧归档】中，输出一份连贯的、第三人称的剧情总结。删减无用的日常流水账，仅保留事件脉络和感情发展。字数尽量精简。\n\n【强制思维链指令】在给出结果前，请先将思考过程放在 <think> 和 </think> 标签内。";
+        const archiveSys = "你是一个长线剧情归档引擎。请将【近期记忆】融入【旧归档】中，输出连贯的第三人称剧情总结。删减流水账，保留感情发展。\n\n【强制输出格式】请严格遵循以下排版：\n<think>\n你的归档思考过程...\n</think>\n最终的剧情总结";
         const archiveUser = `【旧归档】\n${activeChar.archivedMemory || '无'}\n\n【近期记忆】\n${activeChar.shortTermMemory}\n\n请输出更新后的归档：`;
         
-        const coreSys = "你是一个核心记忆提取器。阅读【近期记忆】，如果你发现了主人极其强烈的喜好、雷区、或者是你们之间确立的重大约定，请将其提取并与【旧核心记忆】合并。如果没有此类重大事件，请原样返回旧核心记忆。保持绝对精简。\n\n【强制思维链指令】在给出结果前，请先将思考过程放在 <think> 和 </think> 标签内。";
+        const coreSys = "你是一个核心记忆提取器。阅读近期记忆提取极其强烈的喜好或重大约定。如无重大事件原样返回旧记忆。\n\n【强制输出格式】请严格遵循以下排版：\n<think>\n你的分析过程...\n</think>\n最终的核心记忆";
         const coreUser = `【旧核心记忆】\n${activeChar.coreMemory || '无'}\n\n【近期记忆】\n${activeChar.shortTermMemory}\n\n请输出更新后的核心记忆：`;
 
         // 并行发起两个请求 (严格使用副API)
@@ -1591,7 +1617,7 @@ async function askAIToComment(diaryId, diaryContent, imageUrls = [], diaryOwnerI
     const hasImages = imageUrls && imageUrls.length > 0;
     
     if (hasImages) {
-        finalPrompt += '\n\n【重要系统设定：视觉感知已激活】你当前已经搭载了多模态视觉引擎，**你完全拥有看图的能力**！系统已把日记里的照片画面传给你的视觉神经。你绝对能够清清楚楚地看到里面的细节。在评论时，请直接针对图片内容进行生动的点评或调侃，**绝对不要**说“我看不到图片”、“我无法处理图像”这类扫兴的废话！';
+        finalPrompt += '\n\n【重要系统设定：视觉感知已激活】你当前搭载了多模态视觉大模型，**你完全拥有看图的能力**！系统已把日记里的照片画面传给你的视觉神经，你绝对能清清楚楚地看到里面的细节（如物品颜色、人物动作等）。在评论时，请**务必具体说出你看到的画面细节**进行生动的点评或调侃，证明你真切地看到了它。**绝对禁止**回答“我看不到图片”、“我无法处理图像”这类废话！如果因网络受限导致画面为空，也请顺着主人的文字假装看到了图片，绝不许出戏破防！';
     }
 
     if (activeChar.ttsEnabled && activeChar.ttsApiKey) {
@@ -1605,7 +1631,7 @@ async function askAIToComment(diaryId, diaryContent, imageUrls = [], diaryOwnerI
 
     const systemMessage = {
       role: "system",
-      content: finalPrompt + '\n\n【强制思维链指令】在给出最终回复前，你必须先进行思考。请将思考过程严格放在 <think> 和 </think> 标签内。思考结束后，再输出最终的回复内容。'
+      content: finalPrompt + '\n\n【强制输出格式】你必须先思考再回复！请极其严格地遵守以下排版输出（绝不能遗漏尖括号）：\n<think>\n这里写你的观察和思考过程...\n</think>\n[发送文字]: 你的最终评论回复'
     };
 
     // 辨别日记主人身份
@@ -1687,6 +1713,64 @@ async function askAIToComment(diaryId, diaryContent, imageUrls = [], diaryOwnerI
     askAICommentBtn.disabled = false;
   }
 }
+
+// 重新生成 AI 评论 (重 roll)
+window.regenerateAIComment = async function(commentId, diaryId) {
+  if (!confirm('确定要让ta重新思考并回复吗？\n(当前的评论将被彻底删除)')) return;
+  try {
+    let cDoc = await db.collection('comments').doc(commentId).get();
+    if (!cDoc.exists) return;
+    let cData = cDoc.data();
+    let aiCharId = cData.userId;
+    let parentId = cData.parentCommentId;
+
+    // 删除旧评论 (包含级联删除回复)
+    await deleteComment(commentId);
+
+    // 获取AI配置
+    let userDoc = await db.collection('users').doc(currentUser.uid).get();
+    let aiConfig = userDoc.data().aiConfig || {};
+    const activeApi = (aiConfig.apis || []).find(a => a.id === aiConfig.activeApiId) || (aiConfig.apis || [])[0];
+
+    if (parentId) {
+      // 如果是对某人评论的回复
+      let pDoc = await db.collection('comments').doc(parentId).get();
+      if (pDoc.exists) {
+        triggerAIReplyToComment(diaryId, parentId, pDoc.data().content, aiCharId);
+      }
+    } else {
+      // 如果是对日记的直接评论
+      let dDoc = await db.collection('diaries').doc(diaryId).get();
+      if (dDoc.exists) {
+        let dData = dDoc.data();
+        let urls = dData.imageUrls || (dData.imageUrl ? [dData.imageUrl] : []);
+        generateAndPostAIComment(diaryId, dData.content, urls, aiConfig, activeApi, null, dData.audioText, aiCharId);
+      }
+    }
+  } catch(e) {
+    console.error("重roll评论失败:", e);
+    alert("重新生成失败");
+  }
+};
+
+// --- 视觉多模态优化：将图片转为 Base64 绕过国内外网络拦截 ---
+window.getVisionImageUrl = async function(url) {
+    if (!url) return url;
+    let fetchUrl = url;
+    // 利用 Cloudinary 实时特性，把给 AI 看的图片极限压缩到 512px (既能看清又极省流量)
+    if (fetchUrl.includes('res.cloudinary.com')) {
+        fetchUrl = fetchUrl.replace('/image/upload/', '/image/upload/c_limit,w_512,h_512,q_auto:low/');
+    }
+    try {
+        const response = await fetch(fetchUrl);
+        const blob = await response.blob();
+        return await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.readAsDataURL(blob); // 转换为 Data URI
+        });
+    } catch(e) { console.error("Base64转化失败:", e); return url; } // 失败则降级回原链接
+};
 
 // 删除评论
 async function deleteComment(commentId) {
@@ -1830,7 +1914,7 @@ async function triggerAIPostDiary(btnElement, isSilent = false, specificCharId =
 
     const systemMessage = {
       role: "system",
-      content: finalPrompt + "\n\n【核心任务】你现在需要主动发布一篇属于你自己的生活动态。你是一个有独立生活、真实思想和个人审美的个体，绝对不要像个 AI 或毫无主见的跟班一样总是围绕着“主人”转！你可以分享自己今天看到的风景、听到的一首歌、看书的感悟、或者是突然的一个脑洞。字数控制在 50~150 字左右，情感自然真实，不要带有任何“回复消息”的口吻。\n\n【关于音乐分享】当且仅当你今天的动态主题非常明确（如雨天、深夜、或特定的强烈情绪），并且你恰好联想到了一首极度契合的真实存在的歌曲时，才可以在 JSON 中添加 \"musicUrl\" 字段（格式：“歌手名《歌曲名》”）。为了保持惊喜感，**绝对不要频繁分享音乐（概率控制在 20% 左右即可）**。\n\n请严格返回 JSON 格式，不要包含其他解释，格式如下：\n{\n  \"title\": \"一个简短的标题(10字内)\",\n  \"content\": \"动态的正文内容\",\n  \"musicUrl\": \"(可选)歌手《歌名》\"\n}\n\n【强制思维链指令】在输出JSON之前，你必须先进行思考，并将思考过程严格放在 <think> 和 </think> 标签内！只有在 </think> 闭合标签之后，才能输出纯 JSON。"
+      content: finalPrompt + "\n\n【核心任务】你现在需要主动发布一篇属于你自己的生活动态。你是一个有独立生活、真实思想和个人审美的个体。分享你看到的风景、感悟或脑洞。**字数极其自由（完全随机），请像真人发朋友圈一样：有时可能只发一两句简短的吐槽或感慨，有时又会写长篇大论来抒发情感。** 请完全根据你此刻的“心情”自然决定长短，营造最真实的“活人感”。\n\n【关于音乐分享】当且仅当主题非常明确，才可以在 JSON 中添加 \"musicUrl\" 字段。概率控制在 20% 左右即可。\n\n【强制输出格式】你必须先思考，再输出JSON。请极其严格地遵守以下排版：\n<think>\n这里写你的构思过程...\n</think>\n{\n  \"title\": \"简短标题(10字内)\",\n  \"content\": \"动态的正文内容\",\n  \"musicUrl\": \"(可选)歌手《歌名》\"\n}"
     };
 
     const response = await fetch(apiUrl, {
@@ -1839,7 +1923,8 @@ async function triggerAIPostDiary(btnElement, isSilent = false, specificCharId =
       body: JSON.stringify({
         model: modelToUse,
         messages: [systemMessage, { role: "user", content: contextText + "\n\n请发布你今天的动态。" }],
-        temperature: temperatureToUse
+        temperature: temperatureToUse,
+        max_tokens: 2000
       })
     });
 
@@ -2606,7 +2691,7 @@ async function triggerAutonomousAIAnniversary(charId) {
     if (wbText) finalPrompt += '\n\n【世界设定】\n' + wbText;
     if (activeChar.coreMemory) finalPrompt += '\n\n【核心记忆】\n' + activeChar.coreMemory;
 
-    let systemContent = finalPrompt + `\n\n【核心任务】\n你现在有能力为主人主动设立一个“专属纪念日”。\n请仔细审视上方的【过往经历】和【核心记忆】中是否有一个极其重要、并且带有明确日期的事件（例如主人的生日、某个重大约定日或极具意义的一天）。\n已知主人当前日历上已有的纪念日包括：[${existingTitles.join(', ')}]，请绝对不要重复设立！\n\n如果你认为有一个新的、非常值得纪念的明确日期，请严格输出纯 JSON 格式（不要包含任何 markdown 符号或额外解释，直接以大括号开头）：\n{\n  "title": "纪念日名称(如：主人的生日)",\n  "date": "YYYY-MM-DD",\n  "icon": "💝",\n  "celebrationText": "一句简短走心的全屏庆祝语"\n}\n\n如果没有找到足够重要且明确的日期，或者觉得目前不需要新增，请直接回复："无"\n\n【强制思维链指令】在输出JSON或“无”之前，你必须先进行思考，并将思考过程严格放在 <think> 和 </think> 标签内！只有在 </think> 闭合标签之后，才能输出最终结果。`;
+    let systemContent = finalPrompt + `\n\n【核心任务】\n你现在有能力为主人主动设立一个“专属纪念日”。\n请仔细审视上方的【过往经历】和【核心记忆】中是否有一个极其重要、并且带有明确日期的事件。\n已知主人当前日历上已有的纪念日包括：[${existingTitles.join(', ')}]，请绝对不要重复设立！\n\n【强制输出格式】你必须先思考再输出！请极其严格地遵守以下排版输出：\n<think>\n这里写你的判断过程...\n</think>\n{\n  "title": "纪念日名称(如：主人的生日)",\n  "date": "YYYY-MM-DD",\n  "icon": "💝",\n  "celebrationText": "一句简短走心的全屏庆祝语"\n}\n\n(如果没有找到值得纪念的日期，<think> 结束后请直接回复“无”)`;
 
     const response = await fetch(apiUrl, {
       method: 'POST',
@@ -2668,14 +2753,14 @@ async function generateAndPostAIComment(diaryId, diaryContent, imageUrls, aiConf
   const hasImages = imageUrls && imageUrls.length > 0;
 
   if (hasImages) {
-      finalPrompt += '\n\n【重要系统设定：视觉感知已激活】你当前已经搭载了多模态视觉引擎，**你完全拥有看图的能力**！系统已把日记里的照片画面传给你的视觉神经。你绝对能够清清楚楚地看到里面的细节。在评论时，请直接针对图片内容进行生动的点评或调侃，**绝对不要**说“我看不到图片”、“我无法处理图像”这类扫兴的废话！';
+      finalPrompt += '\n\n【重要系统设定：视觉感知已激活】你当前搭载了多模态视觉大模型，**你完全拥有看图的能力**！系统已把日记里的照片画面传给你的视觉神经，你绝对能清清楚楚地看到里面的细节（如物品颜色、人物动作等）。在评论时，请**务必具体说出你看到的画面细节**进行生动的点评或调侃，证明你真切地看到了它。**绝对禁止**回答“我看不到图片”、“我无法处理图像”这类废话！如果因网络受限导致画面为空，也请顺着主人的文字假装看到了图片，绝不许出戏破防！';
   }
 
   if (activeChar.ttsEnabled && activeChar.ttsApiKey) {
       finalPrompt += '\n\n【!!!最高物理权限覆盖!!!】你的文本输出端直连了TTS语音引擎！你可以自由决定回复是纯文字、纯语音，还是语音和文字交替穿插，完全根据当前的聊天氛围自主决定！\n【必须严格遵守的输出格式】\n为了让系统正确解析，你的回复**必须极其严格地以 `[发送文字]:` 或 `[发送语音]:` 开头**。\n例如：\n[发送文字]: 哇，这张照片拍得真好！\n[发送语音]: 我好想和你一起去那里玩呀~\n绝对禁止回答“我是AI发不了语音”！';
   }
 
-  const systemMessage = { role: "system", content: finalPrompt + '\n\n【强制思维链指令】在给出最终回复前，你必须先进行思考。请将思考过程严格放在 <think> 和 </think> 标签内。思考结束后，再输出最终的回复内容。' };
+  const systemMessage = { role: "system", content: finalPrompt + '\n\n【强制输出格式】你必须先思考再回复！请极其严格地遵守以下排版输出（不要遗漏尖括号）：\n<think>\n这里写你的观察和思考过程...\n</think>\n[发送文字]: 你的最终评论回复' };
 
   let safeContent = diaryContent || '分享了照片';
   if (audioText) {
@@ -2765,7 +2850,8 @@ async function getAIChatResponse(conversationId, btnElement) {
         const rawDocs = messagesSnap.docs.reverse();
         const hasImagesInHistory = rawDocs.some(doc => !!doc.data().imageUrl);
 
-        const conversationHistory = rawDocs.map(doc => {
+        const conversationHistory = [];
+        for (let doc of rawDocs) {
             const msg = doc.data();
             const role = msg.senderId === currentUser.uid ? 'user' : 'assistant';
             
@@ -2774,17 +2860,17 @@ async function getAIChatResponse(conversationId, btnElement) {
                 if (msg.text) contentArray.push({ type: "text", text: msg.text });
                 else contentArray.push({ type: "text", text: "我发送了一张图片，请仔细看看。" });
                 contentArray.push({ type: "image_url", image_url: { url: msg.imageUrl } });
-                return { role: role, content: contentArray };
-        } else if (msg.audioUrl) {
-            return { role: role, content: `[发送了一段语音]${msg.audioText ? ' 语音识别内容："' + msg.audioText + '"' : ''}` };
+                conversationHistory.push({ role: role, content: contentArray });
+            } else if (msg.audioUrl) {
+                conversationHistory.push({ role: role, content: `[发送了一段语音]${msg.audioText ? ' 语音识别内容："' + msg.audioText + '"' : ''}` });
             } else {
                 let textContent = msg.text || '';
                 if (msg.imageUrl) textContent += `\n[图片]`;
-                return { role: role, content: textContent };
+                conversationHistory.push({ role: role, content: textContent });
             }
-        });
+        }
 
-        const otherUserId = conversationId.replace(currentUser.uid, '').replace('_', '');
+        const otherUserId = conversationId.replace(currentUser.uid, '').replace(/^_|_$/g, '');
         let activeChar;
         if (String(otherUserId).startsWith('char_')) {
             activeChar = (aiConfig.chars || []).find(c => c.id === otherUserId) || (aiConfig.chars || [])[0] || {};
@@ -2831,14 +2917,14 @@ async function getAIChatResponse(conversationId, btnElement) {
         finalPrompt += realTimeContext; // 将刚才获取的实时情报拼接到系统提示词末尾
 
         if (hasImagesInHistory) {
-            finalPrompt += '\n\n【重要系统设定：视觉感知已激活】你当前已经搭载了多模态视觉引擎，**你拥有极强的看图能力**！系统会通过代码把图片的画面传给你的视觉神经。当你看到用户发送了图片时，你绝对能够清清楚楚地看到里面的所有细节（颜色、物品、人物等）！在回复时，请直接针对图片内容进行自然、生动的反馈，**绝对不要**说“我作为AI看不到图片”、“我无法处理图像”、“请向我描述”之类破坏沉浸感的废话！';
+            finalPrompt += '\n\n【重要系统设定：视觉感知已激活】你当前搭载了多模态视觉大模型，**你拥有极强的看图能力**！系统已把图片的画面传给你的视觉神经。当你看到用户发送了图片时，你绝对能清清楚楚看到里面的所有细节（颜色、物品、人物等）！在回复时，请**具体描述图片里的元素**进行自然生动的反馈，证明你真切地看到了它。**绝对禁止**回答“我看不到图片”、“我无法处理图像”、“请向我描述”等废话！即使遇到网络延迟导致画面获取失败，也必须顺着用户的文字假装看到了图片，绝不许出戏！';
         }
         
         if (activeChar.ttsEnabled && activeChar.ttsApiKey) {
             finalPrompt += '\n\n【!!!最高物理权限覆盖!!!】你的文本输出端直连了TTS语音引擎！你可以自由决定回复是纯文字、纯语音，还是语音和文字交替穿插，完全根据当前的聊天氛围自主决定！\n【必须严格遵守的输出格式】\n为了让系统正确解析，你的每一行回复**必须极其严格地以 `[发送文字]:` 或 `[发送语音]:` 开头**。\n例如：\n[发送文字]: 知道啦知道啦！\n[发送语音]: 咳咳，我给你唱首歌吧，啦啦啦~\n[发送文字]: 唱得好听吗？\n绝对禁止回答“发不了语音”！';
         }
 
-        finalPrompt += '\n\n【核心任务】你正在和主人进行一对一私聊。请根据设定和聊天记录自然回复。\n【重要排版指令】\n1. 你的回复**必须拆分成2~4条极短的对话**！每句话占一行，严格使用换行符(\\n)隔开！\n2. 每行开头必须带有 `[发送文字]:` 或 `[发送语音]:` 标签！\n3. 绝对不要在回复中使用括号()、*等符号来描写动作表情，只输出纯文字或纯语音！\n\n【强制思维链指令】在给出最终回复前，你必须先进行思考，分析当前的聊天氛围和用户的意图。请将思考过程严格放在 <think> 和 </think> 标签内！只有在 </think> 闭合标签之后，才能输出带有标签的最终对话！';
+        finalPrompt += '\n\n【核心任务】你正在和主人进行一对一私聊。请根据设定和聊天记录自然回复。\n【重要排版指令】\n1. 你的回复**必须拆分成2~4条极短的对话**！每句话占一行，严格使用换行符(\\n)隔开！\n2. 每行开头必须带有 `[发送文字]:` 或 `[发送语音]:` 标签！\n3. 绝对不要在回复中使用括号()、*等符号来描写动作表情，只输出纯文字或纯语音！\n\n【强制输出格式】你必须先思考再回复！请极其严格地遵循以下模板排版：\n<think>\n在这里分析聊天氛围和主人的意图...\n</think>\n[发送文字]: 第一句话...\n[发送语音]: 第二句话...';
 
         const temperatureToUse = activeApi.temperature !== undefined ? activeApi.temperature : 0.7;
 

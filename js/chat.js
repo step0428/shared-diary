@@ -318,7 +318,7 @@ async function loadConversations() {
 
                 const item = document.createElement('div');
                 item.className = 'conversation-item';
-                item.onclick = () => openChat(otherUserId, otherUserInfo.displayName, otherUserInfo.avatarUrl);
+                item.onclick = () => openChat(otherUserId, otherUserInfo.displayName, otherUserInfo.aiAvatar || otherUserInfo.avatarUrl);
 
                 const avatar = renderUserAvatar(otherUserInfo, 48);
                 const lastMessage = data.lastMessage ? escapeHtml(data.lastMessage.text) : '...';
@@ -516,7 +516,7 @@ async function renderChatInterface(conversationId, otherUserName, otherUserAvata
 
     // 预渲染双方头像 HTML
     const myAvatarHtml = renderUserAvatar(currentUserData, 32, '0');
-    const theOtherId = conversationId.replace(currentUser.uid, '').replace('_', '');
+    const theOtherId = conversationId.replace(currentUser.uid, '').replace(/^_|_$/g, '');
     const theirAvatarHtml = renderUserAvatar({ userId: (isAI || String(theOtherId).startsWith('char_')) ? theOtherId : theOtherId, displayName: otherUserName, avatarUrl: otherUserAvatar, aiAvatar: otherUserAvatar }, 32, '0');
 
     unsubscribeChatListener = db.collection('conversations').doc(conversationId).collection('messages')
@@ -557,7 +557,7 @@ async function renderChatInterface(conversationId, otherUserName, otherUserAvata
 
 async function sendMessage(conversationId, text, isSilent = false, customSenderId = null, imageUrl = null, audioUrl = null, audioText = null) {
     if (!currentUser || (!text && !imageUrl && !audioUrl)) return;
-    const otherUserId = conversationId.replace(currentUser.uid, '').replace('_', '');
+    const otherUserId = conversationId.replace(currentUser.uid, '').replace(/^_|_$/g, '');
     const senderId = customSenderId || currentUser.uid;
     const isChatWithAI = otherUserId === AI_COMPANION_USER_ID || String(otherUserId).startsWith('char_');
 
