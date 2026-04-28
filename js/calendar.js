@@ -107,8 +107,8 @@ function initCalendar() {
       // 如果是纪念日事件，使用特殊的加粗居中排版
       if (arg.event.extendedProps.isAnniversary) {
         return {
-          html: '<div class="fc-event-main-content" style="display:flex;align-items:center;justify-content:center;padding:2px 4px;overflow:hidden;width:100%;box-sizing:border-box;font-weight:bold;letter-spacing:0.5px;">' +
-                '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + arg.event.title + '</span>' +
+          html: '<div class="fc-event-main-content" style="display:flex;align-items:center;justify-content:center;padding:2px 4px;overflow:hidden;width:100%;max-width:100%;box-sizing:border-box;font-weight:bold;letter-spacing:0.5px;">' +
+                '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;text-align:center;display:block;">' + arg.event.title + '</span>' +
                 '</div>'
         };
       }
@@ -119,31 +119,31 @@ function initCalendar() {
       let mood = arg.event.extendedProps.mood;
       let coAuthorAvatars = arg.event.extendedProps.coAuthorAvatars || [];
 
-      let html = '<div class="fc-event-main-content" style="display:flex;align-items:center;gap:3px;padding:2px;overflow:hidden;width:100%;box-sizing:border-box;">';
+      let html = '<div class="fc-event-main-content" style="display:flex;align-items:center;gap:3px;padding:2px;overflow:hidden;width:100%;max-width:100%;box-sizing:border-box;">';
 
       // 如果是共建记录，显示多个头像
       if (isCoAuthor && coAuthorAvatars.length > 0) {
         for (let i = 0; i < Math.min(coAuthorAvatars.length, 3); i++) {
           let avatar = coAuthorAvatars[i];
           if (avatar.url) {
-            html += '<img src="' + avatar.url + '" style="width:16px;height:16px;border-radius:50%;object-fit:cover;border:1px solid rgba(255,255,255,0.5);" />';
+            html += '<img src="' + avatar.url + '" style="width:16px;height:16px;border-radius:50%;object-fit:cover;border:1px solid rgba(255,255,255,0.5);flex-shrink:0;" />';
           } else {
-            html += '<div style="width:16px;height:16px;border-radius:50%;background:#7eb8da;display:flex;align-items:center;justify-content:center;font-size:9px;color:#fff;">' + (avatar.initial || '?') + '</div>';
+            html += '<div style="width:16px;height:16px;border-radius:50%;background:#7eb8da;display:flex;align-items:center;justify-content:center;font-size:9px;color:#fff;flex-shrink:0;">' + (avatar.initial || '?') + '</div>';
           }
         }
         if (coAuthorAvatars.length > 3) {
-          html += '<span style="font-size:9px;">+' + (coAuthorAvatars.length - 3) + '</span>';
+          html += '<span style="font-size:9px;flex-shrink:0;">+' + (coAuthorAvatars.length - 3) + '</span>';
         }
       } else if (avatarUrl) {
         // 单个头像
-        html += '<img src="' + avatarUrl + '" style="width:16px;height:16px;border-radius:50%;object-fit:cover;border:1px solid rgba(255,255,255,0.5);" />';
+        html += '<img src="' + avatarUrl + '" style="width:16px;height:16px;border-radius:50%;object-fit:cover;border:1px solid rgba(255,255,255,0.5);flex-shrink:0;" />';
       } else if (displayName) {
         // 无头像显示首字
-        html += '<div style="width:16px;height:16px;border-radius:50%;background:#7eb8da;display:flex;align-items:center;justify-content:center;font-size:9px;color:#fff;">' + displayName.charAt(0).toUpperCase() + '</div>';
+        html += '<div style="width:16px;height:16px;border-radius:50%;background:#7eb8da;display:flex;align-items:center;justify-content:center;font-size:9px;color:#fff;flex-shrink:0;">' + displayName.charAt(0).toUpperCase() + '</div>';
       }
 
-      let moodHtml = mood ? '<span style="font-size:13px;margin-right:2px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.2));">' + mood + '</span>' : '';
-      html += moodHtml + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">' + arg.event.title + '</span>';
+      let moodHtml = mood ? '<span style="font-size:13px;margin-right:2px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.2));flex-shrink:0;">' + mood + '</span>' : '';
+      html += moodHtml + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;display:block;">' + arg.event.title + '</span>';
       html += '</div>';
       return { html: html };
     }

@@ -24,6 +24,18 @@ async function loadUserData() {
   var doc = await db.collection('users').doc(currentUser.uid).get();
   if (doc.exists) {
     currentUserData = doc.data();
+    if (currentUserData.stickers) {
+      window.userStickers = currentUserData.stickers;
+    } else if (currentUserData.aiConfig && currentUserData.aiConfig.stickers) {
+      window.userStickers = currentUserData.aiConfig.stickers;
+      delete currentUserData.aiConfig.stickers;
+      db.collection('users').doc(currentUser.uid).update({
+          stickers: window.userStickers,
+          'aiConfig.stickers': firebase.firestore.FieldValue.delete()
+      });
+    } else {
+      window.userStickers = { collections: [{ id: 'common', name: '常用' }], items: [] };
+    }
     // 如果没有专属码，生成一个
     if (!currentUserData.linkCode) {
       var linkCode = generateLinkCode();
@@ -338,6 +350,7 @@ let dragStart = { x: 0, y: 0 };
   window.openAISettingsModal = function() {
     var menu = document.getElementById('userMenuDropdown');
     if (menu) menu.remove();
+
     document.getElementById('aiSettingsModal').classList.remove('hidden');
     if (typeof loadAISettings === 'function') {
       loadAISettings();

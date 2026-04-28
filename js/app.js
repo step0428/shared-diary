@@ -1,10 +1,24 @@
+// --- 注入盲盒翻转图片交互样式 ---
+const flipStyle = document.createElement('style');
+flipStyle.textContent = `
+.flip-card { background-color: transparent; width: 220px; max-width: 100%; height: 260px; flex-shrink: 0; perspective: 1000px; cursor: pointer; display: block; margin: 10px 0; -webkit-tap-highlight-color: transparent; }
+.flip-card-inner { position: relative; width: 100%; height: 100%; text-align: center; transition: transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1); transform-style: preserve-3d; }
+.flip-card.flipped .flip-card-inner { transform: rotateY(180deg); }
+.flip-card-front, .flip-card-back { position: absolute; width: 100%; height: 100%; -webkit-backface-visibility: hidden; backface-visibility: hidden; border-radius: 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; box-sizing: border-box; box-shadow: 0 4px 15px rgba(0,0,0,0.2); border: 12px solid #f8f9fa; border-bottom-width: 45px; overflow: hidden; }
+.flip-card-front { background-color: #e2e5e9; color: #888; font-size: 13px; font-weight: bold; }
+.flip-card-front::before { content: '📸'; font-size: 40px; margin-bottom: 12px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1)); }
+.flip-card-back { background-color: #fff; color: #444; transform: rotateY(180deg); font-size: 14px; text-align: left; align-items: flex-start; justify-content: flex-start; padding: 10px; overflow-y: auto; line-height: 1.6; }
+.flip-card-front span { display: none; }
+`;
+document.head.appendChild(flipStyle);
+
 // --- 紧急清理浏览器 PWA 顽固缓存 ---
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then(function(registrations) {
     for(let r of registrations) r.unregister();
   });
 }
-console.log("🚀 新版代码已成功突破缓存加载！");
+// 代码加载完成
 
 
 // DOM 加载完成后初始化
@@ -16,6 +30,7 @@ let activeFilters = ['mine']; // 默认显示"我的记录"
 
 function initApp() {
   // 修正 UI 文案，避免产生“所有人可见等于外网可见”的误解
+  window.initStickerManagerModal();
   document.querySelectorAll('select').forEach(function(select) {
     if (select.id === 'diaryVisibility' || select.id === 'anniversaryVisibility') {
       for (var i = 0; i < select.options.length; i++) {
@@ -59,6 +74,28 @@ function initApp() {
       initAIHeartbeat();
     }
   });
+}
+
+// 创建全局独立的表情包管理模态框
+window.initStickerManagerModal = function() {
+    if (document.getElementById('stickerManagerModal')) return;
+    const stickerModal = document.createElement('div');
+    stickerModal.id = 'stickerManagerModal';
+    stickerModal.className = 'modal hidden';
+    stickerModal.style.zIndex = '3000'; // 确保层级高于聊天界面
+    stickerModal.innerHTML = `
+        <div class="modal-backdrop" onclick="document.getElementById('stickerManagerModal').classList.add('hidden')"></div>
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3 class="modal-title">表情包仓库</h3>
+                <button onclick="document.getElementById('stickerManagerModal').classList.add('hidden')" class="close-btn">&times;</button>
+            </div>
+            <div id="stickerConfigArea" class="modal-body" style="display:flex; flex-direction: column; gap: 15px; padding: 20px;">
+                <!-- Content will be rendered by JS -->
+            </div>
+        </div>
+    `;
+    document.body.appendChild(stickerModal);
 }
 
 // 设置移动端下拉刷新 (Pull-to-Refresh)
@@ -278,8 +315,31 @@ let currentAiConfig = {
 window.openAISettingsModal = function() {
   var menu = document.getElementById('userMenuDropdown');
   if (menu) menu.remove();
+  
+  // 重新将表情包入口注入到设置网格中，防止在聊天界面外找不到快捷入口
+  const gridContainer = document.querySelector('#aiSettingsModal .modal-content > div[style*="grid-template-columns"]');
+  if (gridContainer && !document.getElementById('aiSettingsStickerBtn')) {
+      const stickerBtn = document.createElement('button');
+      stickerBtn.id = 'aiSettingsStickerBtn';
+      stickerBtn.className = 'liquid-glass-strong ai-menu-btn';
+      stickerBtn.setAttribute('onclick', "openStickerManagerFromSettings()");
+      stickerBtn.innerHTML = `
+        <span style="font-size:28px;margin-bottom:8px;display:block;">🤡</span>
+        <span style="font-size:15px;font-weight:500;">表情包</span>
+        <span style="font-size:11px;color:var(--text-muted);margin-top:4px;display:block;">全局表情管理</span>
+      `;
+      gridContainer.appendChild(stickerBtn);
+  }
+  
   document.getElementById('aiSettingsModal').classList.remove('hidden');
   loadAISettings();
+};
+
+window.openStickerManagerFromSettings = function() {
+    document.getElementById('aiSettingsModal').classList.add('hidden');
+    if (typeof initStickerManagerModal === 'function') window.initStickerManagerModal();
+    document.getElementById('stickerManagerModal').classList.remove('hidden');
+    if (typeof renderStickerManager === 'function') window.renderStickerManager();
 };
 
 async function loadAISettings() {
@@ -340,7 +400,7 @@ window.openAiSubModal = function(modalId) {
   if (modalId === 'aiApiModal') renderAiApiConfig();
   if (modalId === 'aiCharModal') renderAiCharConfig();
   if (modalId === 'aiPersonaModal') renderAiPersonaConfig();
-  if (modalId === 'aiWorldbookModal') renderAiWorldbookConfig();
+  if (modalId === 'aiWorldbookModal') renderAiWorldbookConfig(); // 移除对 aiStickerModal 的引用
 };
 window.backToAiMainModal = function(modalId) {
   document.getElementById(modalId).classList.add('hidden');
@@ -514,6 +574,217 @@ window.addAiApiConfig = function() {
   currentAiConfig.activeApiId = newId;
   renderAiApiConfig();
 };
+
+// --- 表情包仓库 (Sticker) 逻辑 ---
+window.editingStickerCollectionId = 'common';
+window.userStickers = { collections: [{ id: 'common', name: '常用' }], items: [] };
+
+window.saveUserStickers = async function() {
+    if (!currentUser) return;
+    try {
+        await db.collection('users').doc(currentUser.uid).update({ stickers: window.userStickers });
+        if (window.renderChatStickerPanel) window.renderChatStickerPanel();
+        if (window.renderCommentStickerPanel) window.renderCommentStickerPanel();
+    } catch(e) {
+        console.error('保存表情包失败:', e);
+    }
+}
+
+window.renderStickerManager = function() {
+    if (!window.userStickers || !window.userStickers.collections) {
+        window.userStickers = {
+            collections: [{ id: 'common', name: '常用' }],
+            items: []
+        };
+    }
+    if (!window.editingStickerCollectionId || !window.userStickers.collections.some(c => c.id === window.editingStickerCollectionId)) {
+        window.editingStickerCollectionId = 'common';
+    }
+    window.isStickerBatchMode = window.isStickerBatchMode || false;
+
+    const area = document.getElementById('stickerConfigArea');
+    if (!area) return;
+    const collections = window.userStickers.collections || [];
+    const items = window.userStickers.items || [];
+
+    let tabsHtml = '<div style="display:flex; flex-wrap:wrap; gap:8px; border-bottom: 1px solid var(--border); padding-bottom:10px;">';
+    collections.forEach(c => {
+        const isActive = c.id === window.editingStickerCollectionId;
+        tabsHtml += `<button onclick="window.editingStickerCollectionId='${c.id}'; window.renderStickerManager();" style="padding: 6px 12px; border-radius:8px; border: 1px solid ${isActive ? 'var(--accent)' : 'var(--border)'}; background: ${isActive ? 'var(--accent-light)' : 'var(--bg-tertiary)'}; color: ${isActive ? 'var(--accent)' : 'var(--text-primary)'}; cursor:pointer;">${escapeHtml(c.name)}</button>`;
+    });
+    tabsHtml += `<button onclick="addStickerCollection()" style="padding: 6px 12px; border-radius:8px; border: 1px dashed var(--border); background: transparent; color: var(--text-muted); cursor:pointer;">+ 新建合集</button></div>`;
+
+    let batchControlsHtml = `
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-top:10px; margin-bottom:10px; min-height: 32px;">
+            <div id="stickerBatchToggleWrap" style="display: ${window.isStickerBatchMode ? 'none' : 'block'};">
+                <button onclick="toggleStickerBatchMode()" style="padding:4px 12px; background:var(--bg-tertiary); border:1px solid var(--border); border-radius:15px; color:var(--text-primary); cursor:pointer; font-size:12px;">批量管理</button>
+            </div>
+            <div id="stickerBatchActions" style="display: ${window.isStickerBatchMode ? 'flex' : 'none'}; align-items:center; width:100%; gap:10px; justify-content:space-between; background:var(--bg-tertiary); padding:4px 10px; border-radius:8px; border:1px solid var(--border); box-sizing:border-box;">
+                <label style="display:flex; align-items:center; gap:4px; font-size:12px; margin:0; cursor:pointer; color:var(--text-primary);">
+                    <input type="checkbox" id="stickerSelectAllCb" onchange="toggleAllStickers(this.checked)" style="margin:0;"> 全选
+                </label>
+                <div style="display:flex; gap:8px;">
+                    <button onclick="toggleStickerBatchMode()" style="padding:4px 10px; background:transparent; border:1px solid var(--border); border-radius:6px; color:var(--text-primary); cursor:pointer; font-size:12px;">取消</button>
+                    <button onclick="deleteSelectedStickers()" style="padding:4px 10px; background:rgba(255,100,100,0.15); border:1px solid rgba(255,100,100,0.3); border-radius:6px; color:#ff6b6b; cursor:pointer; font-size:12px;">删除选中</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    let itemsHtml = '<div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap:15px; max-height: 300px; overflow-y:auto; padding:10px 5px;">';
+    items.filter(i => i.collectionId === window.editingStickerCollectionId).forEach(item => {
+        itemsHtml += `
+            <div style="position:relative; text-align:center;">
+                 <input type="checkbox" class="sticker-checkbox" value="${item.id}" style="display: ${window.isStickerBatchMode ? 'block' : 'none'}; position:absolute; top:4px; left:4px; z-index:5; width:16px; height:16px; cursor:pointer;"></input>
+                <img src="${escapeHtml(item.url)}" style="width:60px; height:60px; object-fit:contain; background:rgba(255,255,255,0.05); border-radius:8px;">
+                <input type="text" value="${escapeHtml(item.name)}" onchange="updateSticker('${item.id}', 'name', this.value)" placeholder="名称" style="width:100%; font-size:12px; text-align:center; margin-top:5px; padding:4px; background:var(--bg-tertiary); border:1px solid var(--border); border-radius:4px; color:var(--text-primary);">
+                <button onclick="deleteSticker('${item.id}')" style="display: ${window.isStickerBatchMode ? 'none' : 'block'}; position:absolute; top:-8px; right:2px; background: #ff6b6b; color:white; border:none; border-radius:50%; width:20px; height:20px; cursor:pointer; font-size:12px; line-height:20px;">×</button>
+            </div>
+        `;
+    });
+    itemsHtml += `
+        <div style="text-align:center; display: ${window.isStickerBatchMode ? 'none' : 'flex'}; flex-direction:column; align-items:center; justify-content:center; border: 2px dashed var(--border); border-radius:8px; aspect-ratio:1; cursor:pointer;" onclick="addStickerManually()">
+            <span style="font-size:24px; color:var(--text-muted);">+</span>
+            <span style="font-size:12px; color:var(--text-muted);">手动添加</span>
+        </div>
+    `;
+    itemsHtml += '</div>';
+
+    const bulkImportHtml = `
+        <div style="margin-top: 10px; display: ${window.isStickerBatchMode ? 'none' : 'block'};">
+            <label style="font-size:12px;color:var(--text-muted);margin-bottom:4px;display:block;">批量导入</label>
+            <p style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">每行一个表情，格式为：<code style="background:var(--bg-tertiary);padding:2px 4px;border-radius:4px;">名称 URL</code> (名称和URL用空格隔开)</p>
+            <textarea id="stickerBulkImport" rows="4" placeholder="开心 http://.../happy.gif\n难过 http://.../sad.png" style="width:100%;padding:10px 12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:13px;box-sizing:border-box;resize:vertical;font-family:inherit;"></textarea>
+            <button class="liquid-glass-strong" onclick="bulkImportStickers()" style="margin-top:8px; padding: 8px 16px; background: var(--accent); color:white; border:none; border-radius:8px; cursor:pointer; font-size:13px; font-weight:bold;">开始导入</button>
+        </div>
+    `;
+
+    area.innerHTML = tabsHtml + batchControlsHtml + itemsHtml + bulkImportHtml;
+}
+
+window.addStickerCollection = function() {
+    showInputModal('新建合集', '输入合集名称', '', (name) => {
+        if (name && name.trim()) {
+            window.userStickers.collections.push({ id: 'coll_' + Date.now(), name: name.trim() });
+            window.saveUserStickers();
+            window.renderStickerManager();
+        }
+    });
+}
+
+window.addStickerManually = function() {
+    let existing = document.getElementById('addStickerModal');
+    if (existing) existing.remove();
+
+    let modal = document.createElement('div');
+    modal.id = 'addStickerModal';
+    modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:4000;';
+    modal.innerHTML = `
+        <div style="background:var(--bg-primary);border-radius:12px;padding:24px;width:320px;max-width:90%;">
+            <h3 style="margin:0 0 16px;font-size:16px;color:var(--text-primary);">手动添加表情</h3>
+            <div style="margin-bottom:12px;">
+                <label style="display:block;font-size:13px;color:var(--text-muted);margin-bottom:6px;">表情名称 (用于AI识别)</label>
+                <input type="text" id="newStickerName" placeholder="例如：开心" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-secondary);color:var(--text-primary);box-sizing:border-box;">
+            </div>
+            <div style="margin-bottom:16px;">
+                <label style="display:block;font-size:13px;color:var(--text-muted);margin-bottom:6px;">表情图片 URL</label>
+                <input type="text" id="newStickerUrl" placeholder="http://..." style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-secondary);color:var(--text-primary);box-sizing:border-box;">
+            </div>
+            <div style="display:flex;gap:10px;justify-content:flex-end;">
+                <button onclick="document.getElementById('addStickerModal').remove()" style="padding:8px 16px;border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--text-primary);cursor:pointer;">取消</button>
+                <button id="confirmAddStickerBtn" style="padding:8px 16px;border:none;border-radius:6px;background:var(--accent);color:#fff;cursor:pointer;">确认</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    document.getElementById('confirmAddStickerBtn').onclick = () => {
+        let name = document.getElementById('newStickerName').value.trim();
+        let url = document.getElementById('newStickerUrl').value.trim();
+        
+        if (!name) return alert('请输入表情名称');
+        if (!url || !url.startsWith('http')) return alert('请输入有效的图片 URL');
+        
+        window.userStickers.items.push({
+            id: 'sticker_' + Date.now(),
+            name: name,
+            url: url,
+            collectionId: window.editingStickerCollectionId
+        });
+        window.saveUserStickers();
+        window.renderStickerManager();
+        modal.remove();
+    };
+}
+
+window.bulkImportStickers = function() {
+    const text = document.getElementById('stickerBulkImport').value.trim();
+    if (!text) return;
+    const lines = text.split('\n');
+    let addedCount = 0;
+    lines.forEach(line => {
+        const parts = line.trim().split(/\s+/);
+        if (parts.length >= 2) {
+            const name = parts[0];
+            const url = parts[1];
+            if (name && url.startsWith('http')) {
+                window.userStickers.items.push({
+                    id: 'sticker_' + Date.now() + Math.random(),
+                    name: name,
+                    url: url,
+                    collectionId: window.editingStickerCollectionId
+                });
+                addedCount++;
+            }
+        }
+    });
+    if (addedCount > 0) {
+        alert(`成功导入 ${addedCount} 个表情！`);
+        document.getElementById('stickerBulkImport').value = '';
+        window.saveUserStickers();
+        window.renderStickerManager();
+    } else {
+        alert('没有找到有效格式的表情数据。');
+    }
+}
+
+window.updateSticker = function(id, field, value) {
+    const item = window.userStickers.items.find(i => i.id === id);
+    if (item) {
+        item[field] = value.trim();
+        window.saveUserStickers();
+    }
+}
+
+window.deleteSticker = function(id) {
+    window.userStickers.items = window.userStickers.items.filter(i => i.id !== id);
+    window.saveUserStickers();
+    window.renderStickerManager();
+}
+
+window.toggleStickerBatchMode = function() {
+    window.isStickerBatchMode = !window.isStickerBatchMode;
+    window.renderStickerManager();
+}
+
+window.toggleAllStickers = function(checked) {
+    document.querySelectorAll('.sticker-checkbox').forEach(cb => cb.checked = checked);
+}
+
+window.deleteSelectedStickers = function() {
+    const checkedBoxes = document.querySelectorAll('.sticker-checkbox:checked');
+    if (checkedBoxes.length === 0) {
+        alert('请先选择要删除的表情');
+        return;
+    }
+    if (confirm(`确定要删除选中的 ${checkedBoxes.length} 个表情吗？`)) {
+        const idsToDelete = Array.from(checkedBoxes).map(cb => cb.value);
+        window.userStickers.items = window.userStickers.items.filter(i => !idsToDelete.includes(i.id));
+        window.saveUserStickers();
+        window.isStickerBatchMode = false;
+        window.renderStickerManager();
+    }
+}
 
 // 角色图鉴逻辑
 window.editingCharId = null;
@@ -1141,7 +1412,7 @@ function renderFriendSidebar() {
   // 异步加载朋友列表
   getAcceptedLinks().then(async function(acceptedLinks) {
     friendList.innerHTML = '';
-    console.log('Accepted links count:', acceptedLinks.length);
+    // Accepted links count: debug
     if (acceptedLinks.length === 0) {
       friendList.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:10px;">暂无链接的朋友</div>';
       return;
@@ -1211,7 +1482,10 @@ function renderFriendSidebar() {
         rightBtn.style.cssText = 'background:var(--accent-light);border:1px solid var(--accent);color:var(--accent);border-radius:10px;cursor:pointer;font-size:11px;padding:3px 8px;transition:all 0.2s;';
         rightBtn.onclick = function(e) {
           e.stopPropagation();
-          if (typeof triggerAIPostDiary === 'function') triggerAIPostDiary(rightBtn, false, filterId);
+          // 新增：调用带输入框的触发函数
+          if (typeof window.triggerAIPostWithPrompt === 'function') {
+            window.triggerAIPostWithPrompt(rightBtn, filterId);
+          }
         };
         
         aiItem.appendChild(leftDiv);
@@ -1273,7 +1547,7 @@ function renderFriendSidebar() {
     }
 
     friendList.appendChild(fragment);
-    console.log('friendList children count:', friendList.children.length);
+    // friendList debug
   });
 }
 

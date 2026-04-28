@@ -353,8 +353,8 @@ async function showAnniversaryDetail(anniversaryId) {
       data.coAuthors.forEach(function(uid) { if (userIds.indexOf(uid) === -1) userIds.push(uid); });
     }
     
-    let aiIds = userIds.filter(id => id === 'AI_COMPANION_USER_ID' || String(id).startsWith('char_'));
-    let queryIds = userIds.filter(id => id !== 'AI_COMPANION_USER_ID' && !String(id).startsWith('char_'));
+    let aiIds = userIds.filter(id => String(id).startsWith('char_'));
+    let queryIds = userIds.filter(id => !String(id).startsWith('char_'));
     var userInfos = queryIds.length > 0 ? await getBatchUserInfo(queryIds) : [];
     var userMap = {};
     userInfos.forEach(function(u) { userMap[u.userId] = u; });
@@ -522,8 +522,8 @@ async function loadAnniversaries() {
     }
 
     var userMap = {};
-    let aiIds = userIds.filter(id => id === 'AI_COMPANION_USER_ID' || String(id).startsWith('char_'));
-    let queryIds = userIds.filter(id => id !== 'AI_COMPANION_USER_ID' && !String(id).startsWith('char_'));
+    let aiIds = userIds.filter(id => String(id).startsWith('char_'));
+    let queryIds = userIds.filter(id => !String(id).startsWith('char_'));
     if (queryIds.length > 0) {
       var userInfos = await getBatchUserInfo(queryIds);
       userInfos.forEach(function(u) { userMap[u.userId] = u; });

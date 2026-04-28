@@ -128,6 +128,118 @@ function setupChat() {
         });
     }
 
+    // 动态注入表情包按钮和面板
+    if (chatImageBtn && !document.getElementById('chatStickerBtn')) {
+        const chatStickerBtn = document.createElement('button');
+        chatStickerBtn.id = 'chatStickerBtn';
+        chatStickerBtn.type = 'button';
+        chatStickerBtn.innerHTML = '🤡';
+        chatStickerBtn.title = '发送表情';
+        chatStickerBtn.style.cssText = 'background:none; border:none; font-size:18px; cursor:pointer; color:var(--text-muted); padding:0 8px; transition:color 0.2s; display:flex; align-items:center;';
+        chatImageBtn.parentNode.insertBefore(chatStickerBtn, chatImageBtn.nextSibling);
+
+        const chatForm = document.getElementById('chatInputForm');
+        const stickerPanel = document.createElement('div');
+        stickerPanel.id = 'chatStickerPanel';
+        stickerPanel.className = 'hidden';
+        stickerPanel.style.cssText = 'position:absolute; bottom:calc(100% + 10px); left:0; right:0; background:var(--bg-secondary); border-top:1px solid var(--border); border-radius:12px 12px 0 0; box-shadow:0 -4px 12px rgba(0,0,0,0.1); z-index:20; height:220px; display:flex; flex-direction:column; overflow:hidden;';
+        chatForm.appendChild(stickerPanel);
+
+        chatStickerBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            stickerPanel.classList.toggle('hidden');
+            if (!stickerPanel.classList.contains('hidden')) {
+                window.renderChatStickerPanel();
+            }
+        });
+        
+        // 点击外部关闭表情面板
+        document.addEventListener('click', (e) => {
+            if (!stickerPanel.contains(e.target) && e.target !== chatStickerBtn) {
+                stickerPanel.classList.add('hidden');
+            }
+        });
+        
+        // 阻止面板内的点击事件冒泡导致关闭
+        stickerPanel.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+    }
+
+window.activeChatStickerTab = 'common';
+
+window.renderChatStickerPanel = function() {
+    const panel = document.getElementById('chatStickerPanel');
+    if (!panel) return;
+
+    const stickers = window.userStickers || { collections: [], items: [] };
+    const collections = stickers.collections || [];
+    const items = stickers.items || [];
+
+    if (collections.length === 0) {
+        collections.push({ id: 'common', name: '常用' });
+    }
+    if (!collections.some(c => c.id === window.activeChatStickerTab)) {
+        window.activeChatStickerTab = collections[0].id;
+    }
+
+    let html = `<div style="display:flex; justify-content:space-between; align-items:center; padding:10px; border-bottom:1px solid var(--border); background:var(--bg-tertiary);">
+        <div style="display:flex; gap:10px; overflow-x:auto; scrollbar-width:none;">`;
+    
+    collections.forEach(c => {
+        const isActive = c.id === window.activeChatStickerTab;
+        html += `<button type="button" onclick="window.activeChatStickerTab='${c.id}'; window.renderChatStickerPanel();" style="padding:4px 12px; border-radius:15px; border:none; background:${isActive ? 'var(--accent)' : 'transparent'}; color:${isActive ? '#fff' : 'var(--text-primary)'}; font-size:12px; cursor:pointer; white-space:nowrap;">${escapeHtml(c.name)}</button>`;
+    });
+
+    html += `</div>
+        <button type="button" onclick="window.openStickerManager()" style="padding:4px 8px; border:none; background:transparent; color:var(--text-muted); cursor:pointer; font-size:16px;" title="管理表情包">⚙️</button>
+    </div>`;
+
+    html += `<div style="flex:1; overflow-y:auto; padding:10px; display:grid; grid-template-columns:repeat(auto-fill, minmax(60px, 1fr)); gap:10px; align-content:start;">`;
+
+    const currentItems = items.filter(i => i.collectionId === window.activeChatStickerTab);
+    if (currentItems.length === 0) {
+        html += `<div style="grid-column:1/-1; text-align:center; padding:20px; color:var(--text-muted); font-size:12px;">此合集暂无表情，请点击右上角 ⚙️ 添加</div>`;
+    } else {
+        currentItems.forEach(item => {
+            html += `<div onclick="sendSticker('${escapeHtml(item.url)}')" style="cursor:pointer; text-align:center; padding: 5px; border-radius: 8px; transition: background 0.2s;" onmouseover="this.style.background='var(--hover-bg)'" onmouseout="this.style.background='transparent'">
+                        <img src="${escapeHtml(item.url)}" title="${escapeHtml(item.name)}" style="width:50px; height:50px; object-fit:contain;">
+                        <div style="font-size:11px; color:var(--text-muted); margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(item.name)}</div>
+                     </div>`;
+        });
+    }
+
+    html += `</div>`;
+    panel.innerHTML = html;
+};
+
+window.sendSticker = async function(stickerUrl) {
+    if (!currentConversationId) return;
+    const panel = document.getElementById('chatStickerPanel');
+    if (panel) panel.classList.add('hidden');
+
+    const sendBtn = document.getElementById('sendChatMessageBtn');
+    const origText = sendBtn.textContent;
+    sendBtn.textContent = '...';
+    sendBtn.disabled = true;
+    
+    try {
+        await sendMessage(currentConversationId, null, false, null, null, null, null, stickerUrl);
+    } catch(err) {
+        console.error("表情发送失败:", err);
+        alert("发送失败，请重试");
+    } finally {
+        sendBtn.textContent = origText;
+        sendBtn.disabled = false;
+    }
+};
+
+window.openStickerManager = function() {
+    if (typeof initStickerManagerModal === 'function') window.initStickerManagerModal();
+    document.getElementById('stickerManagerModal').classList.remove('hidden');
+    if (typeof renderStickerManager === 'function') window.renderStickerManager();
+};
+
     document.getElementById('chatInputForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         const input = document.getElementById('chatMessageInput');
@@ -490,10 +602,12 @@ window.regenerateLastAIResponse = async function(convId) {
         if (deletedCount > 0) {
             await batch.commit();
         }
-        // 重新请求 AI 回复
-        if (typeof getAIChatResponse === 'function') {
-            getAIChatResponse(convId, document.getElementById('askAIReplyBtn'));
-        }
+                // 【核心修复】延时 800ms，给数据库一点同步时间，彻底粉碎旧记忆后再拉取新回复
+                setTimeout(() => {
+                    if (typeof getAIChatResponse === 'function') {
+                        getAIChatResponse(convId, document.getElementById('askAIReplyBtn'));
+                    }
+                }, 800);
     } catch(e) {
         console.error("重新生成失败:", e);
     }
@@ -545,7 +659,8 @@ async function renderChatInterface(conversationId, otherUserName, otherUserAvata
                     <div class="message-bubble" data-msg-id="${doc.id}" data-raw-text="${rawTextData}" data-is-mine="${isMine}" data-is-last-user="${doc.id === lastUserMsgId}" data-timestamp="${timeMillis}">
                         ${msg.imageUrl ? `<img src="${escapeHtml(msg.imageUrl)}" style="max-width:200px; max-height:200px; border-radius:8px; margin-bottom:${msg.text ? '8px' : '0'}; cursor:pointer; display:block;" onclick="openImageViewer('${escapeHtml(msg.imageUrl)}')">` : ''}
                         ${msg.audioUrl ? `<audio src="${escapeHtml(msg.audioUrl)}" controls style="max-width:100%; height:40px; border-radius:8px; margin-bottom:${msg.audioText ? '6px' : '0'};"></audio>` : ''}
-                        ${msg.text && !msg.audioUrl ? escapeHtml(msg.text) : ''}
+                        ${msg.stickerUrl ? `<img src="${escapeHtml(msg.stickerUrl)}" style="max-width:120px; max-height:120px; border-radius:8px; background:var(--bg-tertiary);">` : ''}
+                        ${msg.text && !msg.audioUrl ? (window.parseAIText ? window.parseAIText(escapeHtml(msg.text)) : escapeHtml(msg.text)) : ''}
                         ${msg.audioUrl && msg.audioText ? `<div style="font-size:13px;color:var(--text-primary);padding-top:6px;border-top:1px dashed rgba(128,128,128,0.3);">${escapeHtml(msg.audioText)}</div>` : ''}
                     </div>
                 `;
@@ -555,8 +670,8 @@ async function renderChatInterface(conversationId, otherUserName, otherUserAvata
         });
 }
 
-async function sendMessage(conversationId, text, isSilent = false, customSenderId = null, imageUrl = null, audioUrl = null, audioText = null) {
-    if (!currentUser || (!text && !imageUrl && !audioUrl)) return;
+async function sendMessage(conversationId, text, isSilent = false, customSenderId = null, imageUrl = null, audioUrl = null, audioText = null, stickerUrl = null) {
+    if (!currentUser || (!text && !imageUrl && !audioUrl && !stickerUrl)) return;
     const otherUserId = conversationId.replace(currentUser.uid, '').replace(/^_|_$/g, '');
     const senderId = customSenderId || currentUser.uid;
     const isChatWithAI = otherUserId === AI_COMPANION_USER_ID || String(otherUserId).startsWith('char_');
@@ -575,13 +690,19 @@ async function sendMessage(conversationId, text, isSilent = false, customSenderI
         message.audioUrl = audioUrl;
         message.audioText = audioText;
     }
+    if (stickerUrl) message.stickerUrl = stickerUrl;
     
     const convRef = db.collection('conversations').doc(conversationId);
     await convRef.collection('messages').add(message);
     
     let lastMsgText = text;
-    if (!text && imageUrl) lastMsgText = '[图片]';
+    if (stickerUrl) lastMsgText = '[表情]';
+    else if (!text && imageUrl) lastMsgText = '[图片]';
     else if (text && imageUrl) lastMsgText = '[图片] ' + text;
+    else if (imageUrl && imageUrl.includes('sticker')) { // 智能识别：如果图片链接是表情包，也附上文字描述
+        if (text) lastMsgText = text + ' [图片表情]';
+        else lastMsgText = '[图片表情]';
+    }
     else if (audioUrl) lastMsgText = '[语音] ' + (audioText || '');
 
     await convRef.update({

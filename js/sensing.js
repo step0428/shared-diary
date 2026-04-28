@@ -165,7 +165,7 @@ function executeWeatherFetch() {
   const manualCity = localStorage.getItem('manualWeatherCity');
   // 1. 最高优先级：用户手动绑定的城市
   if (manualCity) {
-    console.log("[天气引擎] 命中降级策略：使用手动绑定城市", manualCity);
+    // 天气引擎使用手动绑定城市
     fetchWeather(manualCity, '手动绑定');
     return;
   }
@@ -174,7 +174,7 @@ function executeWeatherFetch() {
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        console.log("[天气引擎] GPS 物理定位成功");
+        // GPS 定位成功
         // 添加 '~' 符号，wttr.in 规定经纬度查询必须带波浪号前缀
         fetchWeather(`~${position.coords.latitude},${position.coords.longitude}`, 'GPS 物理定位');
       },
@@ -185,7 +185,7 @@ function executeWeatherFetch() {
         else if (error.code === 3) reason = '获取超时';
         else reason = '未知阻拦';
         // 3. 终极兜底：GPS 失败或被拒绝，无缝降级为 IP 定位
-        console.warn("[天气引擎] GPS 失败或被拒绝，降级为 IP 定位:", error.message);
+        // GPS 失败，降级为 IP 定位
         fetchWeather('', `IP定位 (因手机GPS${reason})`);
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 } // 再多给5秒寻找信号

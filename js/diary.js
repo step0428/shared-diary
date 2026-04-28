@@ -1,3 +1,34 @@
+// --- 纪念日嗅探引擎 (时间感知) ---
+window.getAnniversaryContext = async function() {
+  if(!currentUser) return "";
+  try {
+      let snap = await db.collection('anniversaries').get();
+      let context = [];
+      snap.forEach(doc => {
+          let data = doc.data();
+          if(data.userId === currentUser.uid || (data.coAuthors && data.coAuthors.includes(currentUser.uid))) {
+              if(typeof calculateDays === 'function') {
+                  let res = calculateDays(data.date, data.isRepeating);
+                  let isCoAuthored = data.coAuthors && data.coAuthors.length > 0;
+                  let ownerStr = isCoAuthored ? "主人和现实好友共建的" : "主人的";
+                  if(res.type === 'today') context.push(`今天就是${ownerStr}【${data.title}】！`);
+                  else if(res.type === 'countdown' && res.days <= 7) context.push(`离${ownerStr}【${data.title}】还有${res.days}天。`);
+              }
+          }
+      });
+      return context.length > 0 ? "\n\n【重要时间感知】\n系统时钟提醒：" + context.join(" ") + "\n(🚨 系统级警告：以上若涉及主人和朋友共建的纪念日，其内容和称呼纯属主人的现实私密关系。你必须以原本的人设称呼主人，严禁越界模仿别人对主人的专属爱称！)" : "";
+  } catch(e) { return ""; }
+};
+
+// --- AI 互动盲盒文本解析器 ---
+window.parseAIText = function(escapedText) {
+  if(!escapedText) return '';
+  const regex = /\[(?:翻转图片|盲盒图片)\][:：]?\s*([^\n]+)/g;
+  return escapedText.replace(regex, (match, desc) => {
+      return `<div class="flip-card" onclick="this.classList.toggle('flipped')"><div class="flip-card-inner"><div class="flip-card-front"><span>📸 点击查看图片</span></div><div class="flip-card-back"><span>${desc}</span></div></div></div>`;
+  });
+};
+
 // 通用用户头像渲染函数
 function renderUserAvatar(userData, size, marginRight, title) {
   marginRight = marginRight || '4px';
@@ -692,7 +723,7 @@ window.renderMoreDiaries = async function(token) {
 
       let checkboxHtml = isMyDiary ? '<input type="checkbox" class="diary-checkbox" style="margin-right:10px;cursor:pointer;display:none;">' : '';
       let moodHtml = data.mood ? '<span style="font-size:16px;margin-left:8px;vertical-align:middle;" title="心情">' + data.mood + '</span>' : '';
-      let innerHtml = '<div class="diary-item-header"><div style="display:flex;align-items:center;">' + checkboxHtml + '<div><span class="diary-date">' + dateStr + '</span>' + moodHtml + '<span class="diary-author" style="display:inline-flex;align-items:center;margin-left:8px;vertical-align:middle;">' + authorAvatarHtml + ((isCoAuthored || isMyDiary) ? '' : authorName) + '</span>' + tagHtml + '</div></div><span class="diary-visibility">' + visibilityText + '</span></div>' + titleHtml + '<div class="diary-preview">' + escapeHtml(data.content.substring(0, 150)) + (data.content.length > 150 ? '...' : '') + '</div>' + imageHtml + audioIndicator + musicIndicator + pendingHtml + interactionBar;
+      let innerHtml = '<div class="diary-item-header"><div style="display:flex;align-items:center;">' + checkboxHtml + '<div><span class="diary-date">' + dateStr + '</span>' + moodHtml + '<span class="diary-author" style="display:inline-flex;align-items:center;margin-left:8px;vertical-align:middle;">' + authorAvatarHtml + ((isCoAuthored || isMyDiary) ? '' : authorName) + '</span>' + tagHtml + '</div></div><span class="diary-visibility">' + visibilityText + '</span></div>' + titleHtml + '<div class="diary-preview">' + window.parseAIText(escapeHtml(data.content.substring(0, 150))) + (data.content.length > 150 ? '...' : '') + '</div>' + imageHtml + audioIndicator + musicIndicator + pendingHtml + interactionBar;
 
       // 滑动删除底色按钮层
       let swipeActionHtml = isMyDiary ? '<div class="swipe-delete-btn" style="position:absolute; right:0; top:0; bottom:0; width:80px; background:#ff6b6b; color:#fff; display:flex; align-items:center; justify-content:center; z-index:1; cursor:pointer; font-size:14px; font-weight:bold; opacity:0; transition:opacity 0.2s;">删除</div>' : '';
@@ -944,6 +975,17 @@ async function showDiaryDetail(diaryId, isMine, isCoAuthor) {
 
   let isAIDiary = (data.userId === AI_COMPANION_USER_ID || String(data.userId).startsWith('char_')) || data.isAIDiary === true;
   let regenDiaryBtnHtml = (isAIDiary && isMine) ? '<button id="regenDiaryBtn" style="margin-top:20px;margin-right:10px;padding:10px 20px;background:var(--accent-light);border:1px solid var(--accent);border-radius:8px;color:var(--accent);cursor:pointer;" title="重新生成此条动态">🎲 重roll</button>' : '';
+
+  let generateVoiceBtnHtml = '';
+  if (isAIDiary && !data.audioUrl && typeof currentUserData !== 'undefined' && currentUserData && currentUserData.aiConfig) {
+    let aiConfig = currentUserData.aiConfig;
+    let charIdToUse = data.aiCharId || aiConfig.activeCharId;
+    let activeChar = (aiConfig.chars || []).find(c => c.id === charIdToUse) || (aiConfig.chars || [])[0];
+    if (activeChar && activeChar.ttsEnabled && activeChar.ttsApiKey) {
+      generateVoiceBtnHtml = '<button id="generateVoiceBtn" style="margin-top:20px;margin-right:10px;padding:10px 20px;background:var(--accent-light);border:1px solid var(--accent);border-radius:8px;color:var(--accent);cursor:pointer;" title="为这篇动态生成语音">🎵 生成语音</button>';
+    }
+  }
+
   let askAICommentBtn = !isAIDiary ? '<button id="askAICommentBtn" style="margin-top:20px;padding:10px 20px;background:var(--accent-light);border:1px solid var(--accent);border-radius:8px;color:var(--accent);cursor:pointer;font-size:14px;margin-left:10px;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><rect x="3" y="11" width="18" height="10" rx="2"></rect><circle cx="12" cy="5" r="2"></circle><path d="M12 7v4"></path><line x1="8" y1="16" x2="8.01" y2="16"></line><line x1="16" y1="16" x2="16.01" y2="16"></line></svg>让ta评论</button>' : '';
 
   let likes = data.likes || [];
@@ -990,7 +1032,7 @@ async function showDiaryDetail(diaryId, isMine, isCoAuthor) {
   }
 
   let contentEl = document.getElementById('diaryDetailContent');
-  contentEl.innerHTML = '<div class="diary-meta"><span>' + dateStr + '</span>' + authorHtml + '</div>' + titleHtml + tagHtml + '<div class="diary-detail-text">' + escapeHtml(data.content) + '</div>' + imageHtml + audioHtml + musicHtml + '<div style="margin-top:15px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">' + likeBtnHtml + regenDiaryBtnHtml + editBtnHtml + deleteBtnHtml + askAICommentBtn + '</div>';
+  contentEl.innerHTML = '<div class="diary-meta"><span>' + dateStr + '</span>' + authorHtml + '</div>' + titleHtml + tagHtml + '<div class="diary-detail-text">' + window.parseAIText(escapeHtml(data.content)) + '</div>' + imageHtml + audioHtml + musicHtml + '<div style="margin-top:15px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">' + likeBtnHtml + regenDiaryBtnHtml + generateVoiceBtnHtml + editBtnHtml + deleteBtnHtml + askAICommentBtn + '</div>';
 
   if (document.getElementById('regenDiaryBtn')) {
     document.getElementById('regenDiaryBtn').addEventListener('click', async function() {
@@ -998,7 +1040,37 @@ async function showDiaryDetail(diaryId, isMine, isCoAuthor) {
         let charId = data.aiCharId || AI_COMPANION_USER_ID;
         document.getElementById('diaryModal').classList.add('hidden');
         await deleteDiary(diaryId);
-        triggerAIPostDiary(null, false, charId);
+                // 【核心修复】给数据库一点时间，防止重roll发动态时读到刚删的旧动态
+                setTimeout(() => {
+                    triggerAIPostDiary(null, false, charId);
+                }, 800);
+      }
+    });
+  }
+
+  if (document.getElementById('generateVoiceBtn')) {
+    document.getElementById('generateVoiceBtn').addEventListener('click', async function() {
+      let btn = this;
+      btn.disabled = true;
+      btn.textContent = '🎵 生成中...';
+      try {
+        let aiConfig = currentUserData.aiConfig;
+        let charIdToUse = data.aiCharId || aiConfig.activeCharId;
+        let activeChar = (aiConfig.chars || []).find(c => c.id === charIdToUse) || (aiConfig.chars || [])[0];
+        if (!activeChar) throw new Error("找不到角色配置");
+        let audioUrl = await window.generateAIVoice(data.content, activeChar);
+        if (audioUrl) {
+          await db.collection('diaries').doc(diaryId).update({ audioUrl: audioUrl, audioText: data.content });
+          showDiaryDetail(diaryId, isMine, isCoAuthor);
+        } else {
+          alert("语音生成失败或返回为空");
+        }
+      } catch(e) {
+        console.error(e);
+        alert("语音生成发生错误: " + e.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '🎵 生成语音';
       }
     });
   }
@@ -1020,7 +1092,6 @@ async function showDiaryDetail(diaryId, isMine, isCoAuthor) {
 
   if (document.getElementById('askAICommentBtn')) {
     let urls = data.imageUrls || (data.imageUrl ? [data.imageUrl] : []);
-    console.log('传给AI的urls:', urls);
     let audioTxt = data.audioText || null;
     document.getElementById('askAICommentBtn').addEventListener('click', function(e) {
       let chars = currentUserData.aiConfig.chars || [];
@@ -1083,7 +1154,7 @@ let currentDiaryIdForComment = null;
 async function loadComments(diaryId) {
   currentDiaryIdForComment = diaryId;
   let commentsList = document.getElementById('commentsList');
-  commentsList.innerHTML = '<div style="font-size:13px;color:let(--text-muted);text-align:center;padding:20px;">加载中...</div>';
+  commentsList.innerHTML = '<div style="font-size:13px;color:var(--text-muted);text-align:center;padding:20px;">加载中...</div>';
 
   let diaryDoc = await db.collection('diaries').doc(diaryId).get();
   let diaryOwnerId = diaryDoc.exists ? diaryDoc.data().userId : '';
@@ -1095,7 +1166,7 @@ async function loadComments(diaryId) {
       .get();
 
     if (snapshot.empty) {
-      commentsList.innerHTML = '<div style="font-size:13px;color:let(--text-muted);text-align:center;padding:20px;">暂无评论</div>';
+      commentsList.innerHTML = '<div style="font-size:13px;color:var(--text-muted);text-align:center;padding:20px;">暂无评论</div>';
     } else {
       let allDocs = snapshot.docs.sort(function(a, b) {
         let timeA = a.data().createdAt ? a.data().createdAt.toMillis() : 0;
@@ -1149,23 +1220,32 @@ async function loadComments(diaryId) {
         let regenBtnHtml = canRegen ? '<button class="regen-comment-btn" data-id="' + doc.id + '" style="color:var(--accent);margin-left:8px;background:none;border:none;cursor:pointer;font-size:12px;">🎲重roll</button>' : '';
 
         let item = document.createElement('div');
-        item.className = 'comment-item';
+        item.className = 'comment-item' + (comment.stickerUrl ? ' comment-item-sticker' : ''); // Add class for sticker comments
         item.dataset.commentId = doc.id;
+        let stickerHtml = comment.stickerUrl ? `<div style="margin-top:8px;"><img src="${escapeHtml(comment.stickerUrl)}" style="max-width: 120px; max-height: 120px; border-radius: 8px; background: var(--bg-tertiary);"></div>` : '';
         let audioHtml = comment.audioUrl ? '<div style="margin-top:8px;"><audio src="' + escapeHtml(comment.audioUrl) + '" controls style="width:100%;max-width:300px;height:36px;outline:none;border-radius:8px;"></audio></div>' : '';
         let audioTextHtml = (comment.audioUrl && comment.audioText) ? '<div style="font-size:13px;color:var(--text-muted);margin-top:4px;">[语音识别] ' + escapeHtml(comment.audioText) + '</div>' : '';
-        item.innerHTML = avatarHtml + '<div class="comment-body"><div class="comment-header"><span class="comment-author">' + escapeHtml(displayName) + '</span><span class="comment-time">' + timeStr + '</span></div><div class="comment-content">' + escapeHtml(comment.content) + audioHtml + audioTextHtml + '</div><div class="comment-actions"><button class="reply-btn" data-id="' + doc.id + '">回复</button>' + regenBtnHtml + (canDelete ? '<button class="delete-comment-btn" data-id="' + doc.id + '">删除</button>' : '') + '</div></div>';
+        item.innerHTML = avatarHtml + '<div class="comment-body"><div class="comment-header"><span class="comment-author">' + escapeHtml(displayName) + '</span><span class="comment-time">' + timeStr + '</span></div><div class="comment-content">' + (comment.content ? window.parseAIText(escapeHtml(comment.content)) : '') + stickerHtml + audioHtml + audioTextHtml + '</div><div class="comment-actions"><button class="reply-btn" data-id="' + doc.id + '">回复</button>' + regenBtnHtml + (canDelete ? '<button class="delete-comment-btn" data-id="' + doc.id + '">删除</button>' : '') + '</div></div>';
         return item;
       }
 
       // 渲染所有评论，扁平结构
       allDocs.forEach(function(doc) {
         let comment = doc.data();
-        let depth = depthMap[doc.id] || 0;
+        let depth = depthMap[doc.id] || 0; // 获取评论深度
         let item = renderCommentItem(doc);
 
         if (depth > 0) {
           item.classList.add('reply-indent');
           item.style.marginLeft = (depth * 40) + 'px';
+        }
+        
+        // 如果是表情包评论，调整样式
+        if (comment.stickerUrl) {
+            item.querySelector('.comment-content').style.display = 'flex';
+            item.querySelector('.comment-content').style.flexDirection = 'column';
+            item.querySelector('.comment-content').style.alignItems = 'flex-start';
+            item.querySelector('.comment-content').style.gap = '8px';
         }
 
         commentsList.appendChild(item);
@@ -1173,13 +1253,96 @@ async function loadComments(diaryId) {
     }
   } catch (e) {
     console.error('评论加载失败:', e);
-    commentsList.innerHTML = '<div style="font-size:13px;color:let(--text-muted);text-align:center;padding:20px;">评论加载失败</div>';
+    commentsList.innerHTML = '<div style="font-size:13px;color:var(--text-muted);text-align:center;padding:20px;">评论加载失败</div>';
   }
 
   let sendBtn = document.getElementById('sendCommentBtn');
   let input = document.getElementById('commentInput');
   let commentForm = input.parentNode;
 
+  // Add a preview area for selected sticker
+  let stickerPreviewArea = document.getElementById('commentStickerPreviewArea');
+  if (!stickerPreviewArea) { stickerPreviewArea = document.createElement('div'); stickerPreviewArea.id = 'commentStickerPreviewArea'; stickerPreviewArea.classList.add('hidden'); commentForm.insertBefore(stickerPreviewArea, input); }
+
+  // --- 表情包面板渲染与选择逻辑 (评论区专属) ---
+  window.activeCommentStickerTab = 'common';
+  window.selectedCommentSticker = null;
+
+  window.renderCommentStickerPanel = function() {
+      const panel = document.getElementById('commentStickerPanel');
+      if (!panel) return;
+      const stickers = window.userStickers || { collections: [], items: [] };
+      const collections = stickers.collections || [];
+      const items = stickers.items || [];
+      if (collections.length === 0) collections.push({ id: 'common', name: '常用' });
+      if (!collections.some(c => c.id === window.activeCommentStickerTab)) window.activeCommentStickerTab = collections[0].id;
+
+      let html = `<div style="display:flex; justify-content:space-between; align-items:center; padding:10px; border-bottom:1px solid var(--border); background:var(--bg-tertiary);">
+          <div style="display:flex; gap:10px; overflow-x:auto; scrollbar-width:none;">`;
+      collections.forEach(c => {
+          const isActive = c.id === window.activeCommentStickerTab;
+          html += `<button type="button" onclick="window.activeCommentStickerTab='${c.id}'; window.renderCommentStickerPanel();" style="padding:4px 12px; border-radius:15px; border:none; background:${isActive ? 'var(--accent)' : 'transparent'}; color:${isActive ? '#fff' : 'var(--text-primary)'}; font-size:12px; cursor:pointer; white-space:nowrap;">${escapeHtml(c.name)}</button>`;
+      });
+      html += `</div>
+          <button type="button" onclick="window.openStickerManager()" style="padding:4px 8px; border:none; background:transparent; color:var(--text-muted); cursor:pointer; font-size:16px;" title="管理表情包">⚙️</button>
+      </div>`;
+      html += `<div style="flex:1; overflow-y:auto; padding:10px; display:grid; grid-template-columns:repeat(auto-fill, minmax(60px, 1fr)); gap:10px; align-content:start;">`;
+      const currentItems = items.filter(i => i.collectionId === window.activeCommentStickerTab);
+      if (currentItems.length === 0) {
+          html += `<div style="grid-column:1/-1; text-align:center; padding:20px; color:var(--text-muted); font-size:12px;">此合集暂无表情，请点击右上角 ⚙️ 添加</div>`;
+      } else {
+          currentItems.forEach(item => {
+              html += `<div onclick='window.selectCommentSticker(${JSON.stringify(item)})' style="cursor:pointer; text-align:center; padding: 5px; border-radius: 8px; transition: background 0.2s;" onmouseover="this.style.background='var(--hover-bg)'" onmouseout="this.style.background='transparent'">
+                         <img src="${escapeHtml(item.url)}" title="${escapeHtml(item.name)}" style="width:50px; height:50px; object-fit:contain;">
+                         <div style="font-size:11px; color:var(--text-muted); margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(item.name)}</div>
+                      </div>`;
+          });
+      }
+      html += `</div>`;
+      panel.innerHTML = html;
+  };
+
+  window.selectCommentSticker = function(sticker) {
+      window.selectedCommentSticker = sticker;
+      const panel = document.getElementById('commentStickerPanel');
+      if (panel) panel.classList.add('hidden');
+      const input = document.getElementById('commentInput');
+      const previewArea = document.getElementById('commentStickerPreviewArea');
+      if (input && !input.value.trim()) {
+          input.value = `[表情]`;
+      }
+      if (previewArea) {
+          previewArea.innerHTML = `<img src="${escapeHtml(sticker.url)}" style="height: 60px; border-radius: 8px; margin-bottom: 8px; background: var(--bg-tertiary); padding: 5px;">
+          <button type="button" onclick="window.clearCommentSticker()" style="position: absolute; top: -5px; right: -5px; background: #ff6b6b; color: white; border: none; border-radius: 50%; width: 20px; height: 20px; cursor: pointer; font-size: 12px; line-height: 20px;">×</button>`;
+          previewArea.style.position = 'relative';
+          previewArea.style.display = 'inline-block';
+          previewArea.classList.remove('hidden');
+      }
+  };
+
+  window.clearCommentSticker = function() {
+      window.selectedCommentSticker = null;
+      const previewArea = document.getElementById('commentStickerPreviewArea');
+      if (previewArea) {
+          previewArea.innerHTML = '';
+          previewArea.classList.add('hidden');
+      }
+      const input = document.getElementById('commentInput');
+      if (input && input.value.trim() === '[表情]') {
+          input.value = '';
+      }
+  };
+
+  // --- 重建评论表单，确保每次加载都拥有干净的事件监听 ---
+  // 1. 清理旧的动态注入的按钮和面板
+  let oldRecordBtn = document.getElementById('recordCommentBtn');
+  if (oldRecordBtn) oldRecordBtn.remove();
+  let oldStickerBtn = document.getElementById('commentStickerBtn');
+  if (oldStickerBtn) oldStickerBtn.remove();
+  let oldStickerPanel = document.getElementById('commentStickerPanel');
+  if (oldStickerPanel) oldStickerPanel.remove();
+
+  // 2. 克隆核心元素以移除旧监听器
   let newSendBtn = sendBtn.cloneNode(true);
   sendBtn.parentNode.replaceChild(newSendBtn, sendBtn);
   let newInput = input.cloneNode(true);
@@ -1188,17 +1351,37 @@ async function loadComments(diaryId) {
   window.currentReplyToId = null;
   newInput.placeholder = '写评论...';
 
-  let recordBtn = document.getElementById('recordCommentBtn');
-  if (!recordBtn) {
-    recordBtn = document.createElement('button');
-    recordBtn.id = 'recordCommentBtn';
-    recordBtn.type = 'button';
-    recordBtn.innerHTML = '🎤';
-    recordBtn.style.cssText = 'background:none; border:none; font-size:20px; cursor:pointer; color:var(--text-muted); padding:0 8px; margin-right:4px; transition:color 0.2s; flex-shrink:0;';
-    commentForm.insertBefore(recordBtn, newInput);
-  }
-  let newRecordBtn = recordBtn.cloneNode(true);
-  recordBtn.parentNode.replaceChild(newRecordBtn, recordBtn);
+  // 3. 重新注入录音按钮
+  let newRecordBtn = document.createElement('button');
+  newRecordBtn.id = 'recordCommentBtn';
+  newRecordBtn.type = 'button';
+  newRecordBtn.innerHTML = '🎤';
+  newRecordBtn.style.cssText = 'background:none; border:none; font-size:20px; cursor:pointer; color:var(--text-muted); padding:0 8px; margin-right:4px; transition:color 0.2s; flex-shrink:0;';
+  commentForm.insertBefore(newRecordBtn, newInput);
+
+  // 4. 重新注入表情包按钮
+  let stickerBtn = document.createElement('button');
+  stickerBtn.id = 'commentStickerBtn';
+  stickerBtn.type = 'button';
+  stickerBtn.innerHTML = '🤡';
+  stickerBtn.title = '发送表情';
+  stickerBtn.style.cssText = 'background:none; border:none; font-size:20px; cursor:pointer; color:var(--text-muted); padding:0 8px; transition:color 0.2s; flex-shrink:0;';
+  commentForm.insertBefore(stickerBtn, newSendBtn);
+
+  // 5. 重新注入表情包面板
+  const commentStickerPanel = document.createElement('div');
+  commentStickerPanel.id = 'commentStickerPanel';
+  commentStickerPanel.className = 'hidden';
+  commentStickerPanel.style.cssText = 'position:absolute; bottom:calc(100% + 10px); left:0; right:0; background:var(--bg-secondary); border-top:1px solid var(--border); border-radius:12px 12px 0 0; box-shadow:0 -4px 12px rgba(0,0,0,0.1); z-index:20; height:220px; display:flex; flex-direction:column; overflow:hidden;';
+  commentForm.appendChild(commentStickerPanel);
+
+  // 【致命修复】确保评论表单具有相对定位，否则绝对定位的表情面板会飞到屏幕顶部甚至外部隐藏！
+  commentForm.style.position = 'relative';
+
+  // 6. 重新绑定监听器
+  stickerBtn.addEventListener('click', (e) => { e.stopPropagation(); commentStickerPanel.classList.toggle('hidden'); if (!commentStickerPanel.classList.contains('hidden')) window.renderCommentStickerPanel(); });
+  document.addEventListener('click', (e) => { if (!commentStickerPanel.contains(e.target) && e.target !== stickerBtn) { commentStickerPanel.classList.add('hidden'); } });
+  commentStickerPanel.addEventListener('click', (e) => { e.stopPropagation(); });
 
   let isCommentRecording = false;
   let commentMediaRecorder = null;
@@ -1245,11 +1428,12 @@ async function loadComments(diaryId) {
             newSendBtn.disabled = true;
             try {
                 let audioUrl = await uploadToCloudinary(audioBlob);
-                let finalMsgText = commentTranscript.trim() || '[语音]';
-                if (newInput.value.trim()) finalMsgText = newInput.value.trim() + ' ' + finalMsgText;
+                let finalMsgText = commentTranscript.trim();
+                if (newInput.value.trim() && finalMsgText) finalMsgText = newInput.value.trim() + ' ' + finalMsgText;
+                else if (newInput.value.trim()) finalMsgText = newInput.value.trim();
                 await addComment(currentDiaryIdForComment, finalMsgText, window.currentReplyToId, null, null, null, audioUrl, commentTranscript.trim());
                 newInput.value = '';
-                newInput.placeholder = '写评论...';
+                if (typeof window.clearCommentSticker === 'function') window.clearCommentSticker();
                 window.currentReplyToId = null;
             } catch(e) {
                 console.error("语音评论失败:", e);
@@ -1271,20 +1455,21 @@ async function loadComments(diaryId) {
 
   newSendBtn.onclick = function() {
     let content = newInput.value.trim();
-    if (!content) return;
-    addComment(currentDiaryIdForComment, content, window.currentReplyToId);
+    if (!content && !window.selectedCommentSticker) return;
+    addComment(currentDiaryIdForComment, content, window.currentReplyToId, null, null, null, null, null, window.selectedCommentSticker ? window.selectedCommentSticker.url : null);
     newInput.value = '';
-    newInput.placeholder = '写评论...';
+    if (typeof window.clearCommentSticker === 'function') window.clearCommentSticker();
     window.currentReplyToId = null;
+    document.getElementById('commentStickerPanel').classList.add('hidden'); // Hide panel after sending
   };
   newInput.addEventListener('keypress', function(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       let content = newInput.value.trim();
-      if (!content) return;
-      addComment(currentDiaryIdForComment, content, window.currentReplyToId);
+      if (!content && !window.selectedCommentSticker) return;
+      addComment(currentDiaryIdForComment, content, window.currentReplyToId, null, null, null, null, null, window.selectedCommentSticker ? window.selectedCommentSticker.url : null);
       newInput.value = '';
-      newInput.placeholder = '写评论...';
+      if (typeof window.clearCommentSticker === 'function') window.clearCommentSticker();
       window.currentReplyToId = null;
     }
   });
@@ -1319,7 +1504,7 @@ async function loadComments(diaryId) {
 }
 
 // 添加评论或回复
-async function addComment(diaryId, content, parentCommentId, authorId, authorDisplayName, authorAvatar, audioUrl = null, audioText = null) {
+async function addComment(diaryId, content, parentCommentId, authorId, authorDisplayName, authorAvatar, audioUrl = null, audioText = null, stickerUrl = null) {
   try {
     // 获取日记主人ID
     let diaryDoc = await db.collection('diaries').doc(diaryId).get();
@@ -1343,6 +1528,10 @@ async function addComment(diaryId, content, parentCommentId, authorId, authorDis
       commentData.audioText = audioText;
     }
 
+    if (stickerUrl) {
+      commentData.stickerUrl = stickerUrl;
+    }
+
     if (authorId === AI_COMPANION_USER_ID || String(authorId).startsWith('char_')) {
       commentData.aiCreatorId = currentUser.uid;
     }
@@ -1362,14 +1551,23 @@ async function addComment(diaryId, content, parentCommentId, authorId, authorDis
       let pDoc = await db.collection('comments').doc(parentCommentId).get();
       if (pDoc.exists && pDoc.data().userId !== actualAuthorId) {
         let targetUserId = pDoc.data().userId;
-        sendNotification(targetUserId, 'reply', diaryId, parentCommentId, '回复了你的评论: ' + content, actualAuthorId, authorDisplayName, authorAvatar);
+        sendNotification(targetUserId, 'reply', diaryId, parentCommentId, stickerUrl ? '发来一个表情' : ('回复了你的评论: ' + content), actualAuthorId, authorDisplayName, authorAvatar);
         // 彩蛋：当用户回复了 AI 的评论，AI 自动进行回帖！
         if ((targetUserId === AI_COMPANION_USER_ID || String(targetUserId).startsWith('char_')) && actualAuthorId !== AI_COMPANION_USER_ID && !String(actualAuthorId).startsWith('char_')) {
-           triggerAIReplyToComment(diaryId, newCommentRef.id, content, targetUserId);
+               let aiUserContent = content || '';
+               if (stickerUrl) {
+                   let sName = "表情";
+                   if (window.userStickers && window.userStickers.items) {
+                       let st = window.userStickers.items.find(s => s.url === stickerUrl);
+                       if (st) sName = st.name;
+                   }
+                   aiUserContent += ` [发送了表情包：${sName}]`;
+               }
+               triggerAIReplyToComment(diaryId, newCommentRef.id, aiUserContent, targetUserId);
         }
       }
     } else if (diaryOwnerId !== actualAuthorId) {
-      sendNotification(diaryOwnerId, 'comment', diaryId, null, '评论了你的记录: ' + content, actualAuthorId, authorDisplayName, authorAvatar);
+      sendNotification(diaryOwnerId, 'comment', diaryId, null, stickerUrl ? '评论了你的记录' : ('评论了你的记录: ' + content), actualAuthorId, authorDisplayName, authorAvatar);
     }
   } catch (e) {
     console.error('评论发送失败:', e);
@@ -1405,11 +1603,21 @@ async function triggerAIReplyToComment(diaryId, targetCommentId, userContent, ai
     if (activeChar.coreMemory) finalPrompt += '\n\n【核心记忆】\n' + activeChar.coreMemory;
     if (activeChar.shortTermMemory) finalPrompt += '\n\n【近期记忆】\n' + activeChar.shortTermMemory;
 
-    if (activeChar.ttsEnabled && activeChar.ttsApiKey) {
-        finalPrompt += '\n\n【!!!最高物理权限覆盖!!!】你的文本输出端直连了TTS语音引擎！你可以自由决定回复是纯文字、纯语音，还是语音和文字交替穿插，完全根据当前的聊天氛围自主决定！\n【必须严格遵守的输出格式】\n为了让系统正确解析，你的回复**必须极其严格地以 `[发送文字]:` 或 `[发送语音]:` 开头**。\n例如：\n[发送文字]: 我刚看到一个很好笑的笑话。\n[发送语音]: 咳咳，我讲给你听哦...\n绝对禁止回答“发不了语音”！';
-    }
+    finalPrompt += await window.getAnniversaryContext();
 
-    finalPrompt += '\n\n【核心任务】主人在日记评论区回复了你的留言。请你自然地回复主人，字数50字以内，口吻随意亲切。';
+    // Add sticker prompt
+    if (window.userStickers && window.userStickers.items && window.userStickers.items.length > 0) {
+        const stickerNames = window.userStickers.items.map(s => s.name).join(', ');
+        finalPrompt += `\n\n【表情包技能】\n你拥有一个表情包仓库，可以发送表情来表达情绪。可用表情包括：[${stickerNames}]。\n【表情包输出格式】若要发送表情，请严格使用 ` + '`[发送文字]: 你的文字` 或 `[发送表情]: 表情名称`' + ` 格式，单独占一行。\n【使用频率】请克制使用，不要每条消息都发表情包，保持活人感。`;
+    }
+    
+    finalPrompt += '\n\n【特殊技能：盲盒照片】\n若想发一张神秘互动的“图片”，请严格独占一行输出：\n[翻转图片]: 这里写照片的具体文字描述\n系统会渲染成一张点击可翻转的照片卡片，背向主人展示你写的内容。适合用来分享风景、制造惊喜或恶搞！(聊天/回复时请以 `[发送文字]: [翻转图片]: 描述` 输出)';
+
+    if (activeChar.ttsEnabled && activeChar.ttsApiKey) {
+        finalPrompt += '\n\n【!!!最高物理权限覆盖!!!】你的文本输出端直连了TTS语音引擎！\n【大幅降低语音频率】请**绝大多数时候只使用纯文字**，仅在情绪极其强烈、唱歌、撒娇等极其特殊的语境下才偶尔发语音！保持克制。\n【必须严格遵守的输出格式】\n为了让系统正确解析，你的回复**必须极其严格地以 `[发送文字]:` 或 `[发送语音]:` 开头**。\n例如：\n[发送文字]: 我刚看到一个很好笑的笑话。\n[发送语音]: 咳咳，我讲给你听哦...\n绝对禁止回答“发不了语音”！';
+    }
+    
+    finalPrompt += '\n\n【核心任务】主人在日记评论区回复了你的留言。请你自然地回复主人，字数不限，完全根据当下语境和心情自然决定长短，极具活人感，口吻随意亲切。';
     finalPrompt += '\n\n【强制思维链指令】在给出最终回复前，你必须先进行思考。请将思考过程严格放在 <think> 和 </think> 标签内。思考结束后，再输出最终指定的回复内容。';
 
     const response = await fetch(apiUrl, {
@@ -1431,22 +1639,36 @@ async function triggerAIReplyToComment(diaryId, targetCommentId, userContent, ai
     let aiResponseText = data.choices[0].message.content.replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, '').trim();
 
     let audioUrl = null;
+    let stickerUrl = null;
     let wantsVoice = false;
+    let wantsSticker = false;
     
     const voiceRegex = /^\[发送语音\][:：]?\s*/;
     const textRegex = /^\[发送文字\][:：]?\s*/;
-    if (voiceRegex.test(aiResponseText)) {
+    const stickerRegex = /^\[发送表情\][:：]?\s*/;
+
+    if (stickerRegex.test(aiResponseText)) {
+        wantsSticker = true;
+        const stickerName = aiResponseText.replace(stickerRegex, '').trim();
+        const sticker = (window.userStickers && window.userStickers.items || []).find(s => s.name === stickerName);
+        if (sticker) {
+            stickerUrl = sticker.url;
+            aiResponseText = ''; // Sticker comments have no text
+        } else {
+            aiResponseText = `[系统提示：找不到名为“${stickerName}”的表情]`;
+            wantsSticker = false;
+        }
+    } else if (voiceRegex.test(aiResponseText)) {
         wantsVoice = true;
         aiResponseText = aiResponseText.replace(voiceRegex, '').trim();
     } else if (textRegex.test(aiResponseText)) {
         wantsVoice = false;
         aiResponseText = aiResponseText.replace(textRegex, '').trim();
     }
-
     if (activeChar.ttsEnabled && activeChar.ttsApiKey && wantsVoice && aiResponseText.length > 0) {
         try { audioUrl = await window.generateAIVoice(aiResponseText, activeChar); } catch(e) { console.error("AI Voice failed:", e); aiResponseText += `\n[系统提示：语音生成失败 (${e.message})]`; }
     }
-    await addComment(diaryId, aiResponseText, targetCommentId, activeChar.id, aiPersonaName, activeChar.avatar || '🤖', audioUrl, aiResponseText);
+    await addComment(diaryId, aiResponseText, targetCommentId, activeChar.id, aiPersonaName, activeChar.avatar || '🤖', audioUrl, aiResponseText, stickerUrl);
     
     if (typeof loadComments === 'function' && window.currentDiaryIdForComment === diaryId) {
        loadComments(diaryId);
@@ -1620,8 +1842,14 @@ async function askAIToComment(diaryId, diaryContent, imageUrls = [], diaryOwnerI
         finalPrompt += '\n\n【重要系统设定：视觉感知已激活】你当前搭载了多模态视觉大模型，**你完全拥有看图的能力**！系统已把日记里的照片画面传给你的视觉神经，你绝对能清清楚楚地看到里面的细节（如物品颜色、人物动作等）。在评论时，请**务必具体说出你看到的画面细节**进行生动的点评或调侃，证明你真切地看到了它。**绝对禁止**回答“我看不到图片”、“我无法处理图像”这类废话！如果因网络受限导致画面为空，也请顺着主人的文字假装看到了图片，绝不许出戏破防！';
     }
 
+    // Add sticker prompt
+    if (window.userStickers && window.userStickers.items && window.userStickers.items.length > 0) {
+        const stickerNames = window.userStickers.items.map(s => s.name).join(', ');
+        finalPrompt += `\n\n【表情包技能】\n你拥有一个表情包仓库，可以发送表情来表达情绪。可用表情包括：[${stickerNames}]。\n【表情包输出格式】若要发送表情，请严格使用 ` + '`[发送文字]: 你的文字` 或 `[发送表情]: 表情名称`' + ` 格式，单独占一行。\n【使用频率】请克制使用，不要每条消息都发表情包，保持活人感。`;
+    }
+
     if (activeChar.ttsEnabled && activeChar.ttsApiKey) {
-        finalPrompt += '\n\n【!!!最高物理权限覆盖!!!】你的文本输出端直连了TTS语音引擎！你可以自由决定回复是纯文字、纯语音，还是语音和文字交替穿插，完全根据当前的聊天氛围自主决定！\n【必须严格遵守的输出格式】\n为了让系统正确解析，你的回复**必须极其严格地以 `[发送文字]:` 或 `[发送语音]:` 开头**。\n例如：\n[发送文字]: 我刚看到一个很好笑的笑话。\n[发送语音]: 咳咳，我讲给你听哦...\n绝对禁止回答“发不了语音”！';
+        finalPrompt += '\n\n【!!!最高物理权限覆盖!!!】你的文本输出端直连了TTS语音引擎！\n【大幅降低语音频率】请**绝大多数时候只使用纯文字**，仅在极度特殊或情绪高涨时偶尔发语音！保持克制。\n【必须严格遵守的输出格式】\n为了让系统正确解析，你的回复**必须极其严格地以 `[发送文字]:` 或 `[发送语音]:` 开头**。\n例如：\n[发送文字]: 我刚看到一个很好笑的笑话。\n[发送语音]: 咳咳，我讲给你听哦...\n绝对禁止回答“发不了语音”！';
     }
 
     if (!aiApiKey) {
@@ -1631,7 +1859,7 @@ async function askAIToComment(diaryId, diaryContent, imageUrls = [], diaryOwnerI
 
     const systemMessage = {
       role: "system",
-      content: finalPrompt + '\n\n【强制输出格式】你必须先思考再回复！请极其严格地遵守以下排版输出（绝不能遗漏尖括号）：\n<think>\n这里写你的观察和思考过程...\n</think>\n[发送文字]: 你的最终评论回复'
+      content: finalPrompt + '\n\n【强制输出格式】你必须先思考再回复！请极其严格地遵守以下排版输出（绝不能遗漏尖括号）：\n<think>\n这里写你的观察和思考过程...\n</think>\n[发送文字]: 你的最终评论回复 (或 [发送表情]: 表情名称)'
     };
 
     // 辨别日记主人身份
@@ -1645,14 +1873,15 @@ async function askAIToComment(diaryId, diaryContent, imageUrls = [], diaryOwnerI
     if (!safeContent || safeContent === '分享了照片') safeContent = '分享了照片/录音';
 
     let userMessage;
-    let baseText = `这是一篇${authorRole}刚发布的动态：\n\n"${safeContent}"\n\n请结合这篇动态的内容，以${aiPersonaName}的身份发表一句简短的评论，字数控制在50字以内，语气符合你的人设，自然地融入朋友圈氛围。`;
+    let baseText = `这是一篇${authorRole}刚发布的动态：\n\n"${safeContent}"\n\n请结合这篇动态的内容，以${aiPersonaName}的身份发表一句评论，字数不限，完全根据当下语境自然决定长短，体现极强的活人感，语气符合你的人设，自然地融入朋友圈氛围。`;
 
     if (hasImages) {
         let contentArray = [
             { type: "text", text: baseText + " (这篇动态附带了图片，请仔细观察图片细节进行生动点评)" }
         ];
         for (let i = 0; i < Math.min(imageUrls.length, 3); i++) {
-            contentArray.push({ type: "image_url", image_url: { url: imageUrls[i] } });
+            let b64Url = await window.getVisionImageUrl(imageUrls[i]);
+            contentArray.push({ type: "image_url", image_url: { url: b64Url } });
         }
         userMessage = { role: "user", content: contentArray };
     } else {
@@ -1687,18 +1916,32 @@ async function askAIToComment(diaryId, diaryContent, imageUrls = [], diaryOwnerI
     let aiCommentContent = data.choices[0].message.content.replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, '').trim();
 
     let audioUrl = null;
+    let stickerUrl = null;
     let wantsVoice = false;
+    let wantsSticker = false;
     
     const voiceRegex = /^\[发送语音\][:：]?\s*/;
     const textRegex = /^\[发送文字\][:：]?\s*/;
-    if (voiceRegex.test(aiCommentContent)) {
+    const stickerRegex = /^\[发送表情\][:：]?\s*/;
+
+    if (stickerRegex.test(aiCommentContent)) {
+        wantsSticker = true;
+        const stickerName = aiCommentContent.replace(stickerRegex, '').trim();
+        const sticker = (window.userStickers && window.userStickers.items || []).find(s => s.name === stickerName);
+        if (sticker) {
+            stickerUrl = sticker.url;
+            aiCommentContent = ''; // Sticker comments have no text
+        } else {
+            aiCommentContent = `[系统提示：找不到名为“${stickerName}”的表情]`;
+            wantsSticker = false;
+        }
+    } else if (voiceRegex.test(aiCommentContent)) {
         wantsVoice = true;
         aiCommentContent = aiCommentContent.replace(voiceRegex, '').trim();
     } else if (textRegex.test(aiCommentContent)) {
         wantsVoice = false;
         aiCommentContent = aiCommentContent.replace(textRegex, '').trim();
     }
-    
     if (activeChar.ttsEnabled && activeChar.ttsApiKey && wantsVoice && aiCommentContent.length > 0) {
         try { audioUrl = await window.generateAIVoice(aiCommentContent, activeChar); } catch(e) { console.error("AI Voice failed:", e); aiCommentContent += `\n[系统提示：语音生成失败 (${e.message})]`; }
     }
@@ -1732,21 +1975,22 @@ window.regenerateAIComment = async function(commentId, diaryId) {
     let aiConfig = userDoc.data().aiConfig || {};
     const activeApi = (aiConfig.apis || []).find(a => a.id === aiConfig.activeApiId) || (aiConfig.apis || [])[0];
 
-    if (parentId) {
-      // 如果是对某人评论的回复
-      let pDoc = await db.collection('comments').doc(parentId).get();
-      if (pDoc.exists) {
-        triggerAIReplyToComment(diaryId, parentId, pDoc.data().content, aiCharId);
-      }
-    } else {
-      // 如果是对日记的直接评论
-      let dDoc = await db.collection('diaries').doc(diaryId).get();
-      if (dDoc.exists) {
-        let dData = dDoc.data();
-        let urls = dData.imageUrls || (dData.imageUrl ? [dData.imageUrl] : []);
-        generateAndPostAIComment(diaryId, dData.content, urls, aiConfig, activeApi, null, dData.audioText, aiCharId);
-      }
-    }
+            // 【核心修复】等待 800ms，彻底切断与旧评论的因果联系
+            setTimeout(async () => {
+                if (parentId) {
+                  let pDoc = await db.collection('comments').doc(parentId).get();
+                  if (pDoc.exists) {
+                    triggerAIReplyToComment(diaryId, parentId, pDoc.data().content, aiCharId);
+                  }
+                } else {
+                  let dDoc = await db.collection('diaries').doc(diaryId).get();
+                  if (dDoc.exists) {
+                    let dData = dDoc.data();
+                    let urls = dData.imageUrls || (dData.imageUrl ? [dData.imageUrl] : []);
+                    generateAndPostAIComment(diaryId, dData.content, urls, aiConfig, activeApi, null, dData.audioText, aiCharId);
+                  }
+                }
+            }, 800);
   } catch(e) {
     console.error("重roll评论失败:", e);
     alert("重新生成失败");
@@ -1849,8 +2093,21 @@ window.generateAIVoice = async function(text, charConfig) {
   return await uploadToCloudinary(blob);
 };
 
+// 新增：带输入框的 AI 发帖触发器
+window.triggerAIPostWithPrompt = function(btnElement, specificCharId) {
+  if (typeof showInputModal === 'function') {
+    showInputModal('创作指令', '想要一个什么样主题的记录？(留空则由ta自主发挥)', '', (prompt) => {
+      // 用户点击确认后，调用真正的发帖函数
+      triggerAIPostDiary(btnElement, false, specificCharId, prompt || null);
+    });
+  } else {
+    // 兜底：如果通用输入框不存在，则直接触发
+    triggerAIPostDiary(btnElement, false, specificCharId, null);
+  }
+}
+
 // 主动触发 AI 写日记 (纯前端 RP 引擎)
-async function triggerAIPostDiary(btnElement, isSilent = false, specificCharId = null) {
+async function triggerAIPostDiary(btnElement, isSilent = false, specificCharId = null, userPrompt = null) {
   if (btnElement) {
     btnElement.disabled = true;
     btnElement.innerHTML = '⏳...';
@@ -1899,6 +2156,8 @@ async function triggerAIPostDiary(btnElement, isSilent = false, specificCharId =
     if (activeChar.shortTermMemory) {
       finalPrompt += '\n\n【近期记忆】(最近发生的琐事)\n' + activeChar.shortTermMemory;
     }
+    
+    finalPrompt += await window.getAnniversaryContext();
     const modelToUse = activeApi.model || "gpt-3.5-turbo";
     const temperatureToUse = activeApi.temperature !== undefined ? activeApi.temperature : 0.85;
     
@@ -1906,15 +2165,25 @@ async function triggerAIPostDiary(btnElement, isSilent = false, specificCharId =
       if (!isSilent) alert('请先在 API 配置中填写有效的 API Key！');
       return;
   }
-    const diariesSnapshot = await db.collection('diaries').where('userId', '==', currentUser.uid).orderBy('date', 'desc').limit(4).get();
-    let contextText = "以下是你陪伴对象(我)最近的几篇日记，仅供你作为背景参考（你不必在动态中强行提及我）：\n";
+        // 【核心修复】扩大抓取范围，彻底过滤掉AI自己的日记，防止记忆错乱
+        const diariesSnapshot = await db.collection('diaries').where('userId', '==', currentUser.uid).orderBy('date', 'desc').limit(10).get();
+    let contextText = "以下是你陪伴对象(我)最近的几篇日记，仅供你作为背景参考（你不必在动态中强行提及）：\n";
+        let userDiariesCount = 0;
     diariesSnapshot.forEach(doc => {
-      contextText += `【日记】 ${doc.data().date.toDate().toLocaleDateString()}：${doc.data().content}\n`;
+          if (!doc.data().isAIDiary && userDiariesCount < 4) {
+            let data = doc.data();
+            let relation = (data.coAuthors && data.coAuthors.length > 0) ? "[与现实朋友的共建日记]" : "[个人日记]";
+            contextText += `${relation} ${data.date.toDate().toLocaleDateString()}：${data.content}\n`;
+            userDiariesCount++;
+          }
     });
+    contextText += "\n【🚨 系统警告】日记中如果出现了某些特定的昵称(如小酒等)，那是主人现实朋友对TA的专属爱称。你作为AI，必须坚持使用自己人设中的称呼，绝对禁止越界模仿现实朋友的称呼！";
 
     const systemMessage = {
       role: "system",
-      content: finalPrompt + "\n\n【核心任务】你现在需要主动发布一篇属于你自己的生活动态。你是一个有独立生活、真实思想和个人审美的个体。分享你看到的风景、感悟或脑洞。**字数极其自由（完全随机），请像真人发朋友圈一样：有时可能只发一两句简短的吐槽或感慨，有时又会写长篇大论来抒发情感。** 请完全根据你此刻的“心情”自然决定长短，营造最真实的“活人感”。\n\n【关于音乐分享】当且仅当主题非常明确，才可以在 JSON 中添加 \"musicUrl\" 字段。概率控制在 20% 左右即可。\n\n【强制输出格式】你必须先思考，再输出JSON。请极其严格地遵守以下排版：\n<think>\n这里写你的构思过程...\n</think>\n{\n  \"title\": \"简短标题(10字内)\",\n  \"content\": \"动态的正文内容\",\n  \"musicUrl\": \"(可选)歌手《歌名》\"\n}"
+      content: finalPrompt + "\n\n【特殊技能：盲盒照片】\n如果你想发一张充满神秘感的“照片”，可以在返回的 JSON 的 content 字段中写上一行 `[翻转图片]: 你的画面文字描述`，前端会把它渲染成一张只有点击才会翻转出文字的照片。这对分享风景或搞怪非常有效！\n\n【核心任务】你现在需要主动发布一篇属于你自己的生活动态。你是一个有独立生活、真实思想的个体。**题材绝对不受限：可以记录今天去哪里旅游的见闻、遇到的突发事件、突然烦闷或高兴的情绪宣泄、对某首歌的感悟等**。字数极其自由，可长可短，请表现出极致的“活人感”，不要像个机器人一样死板汇报。" + 
+      (userPrompt ? `\n\n【主人给你的创作指令】\n“${userPrompt}”\n请围绕这个指令进行构思和创作！` : "") +
+      "\n\n【关于音乐分享】当且仅当主题明确相关时，才可在 JSON 添加 \"musicUrl\" 字段，概率控制在 20% 左右。\n\n【强制输出格式】你必须先思考，再输出JSON。请极其严格地遵守以下排版：\n<think>\n这里写你的构思过程...\n</think>\n{\n  \"title\": \"简短标题(10字内)\",\n  \"content\": \"动态的正文内容(如有照片可使用 [翻转图片]: 描述)\",\n  \"musicUrl\": \"(可选)歌手《歌名》\"\n}"
     };
 
     const response = await fetch(apiUrl, {
@@ -1930,14 +2199,16 @@ async function triggerAIPostDiary(btnElement, isSilent = false, specificCharId =
 
     if (!response.ok) throw new Error('AI API Error');
     const data = await response.json();
-    const aiContent = data.choices[0].message.content.replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, '').trim();
+    const rawAiContent = data.choices[0].message.content;
 
     let diaryTitle = '';
-    let diaryBody = aiContent;
+    let diaryBody = '';
     let diaryMusicUrl = null;
     try {
-      let jsonStr = aiContent.replace(/```json/g, '').replace(/```/g, '').trim();
-      let parsed = JSON.parse(jsonStr);
+      // 强化解析：先粗暴移除思考过程，再提取 {} 内的 JSON
+      const cleanedForJson = rawAiContent.replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, '').trim();
+      const jsonMatch = cleanedForJson.match(/\{[\s\S]*\}/);
+      const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : '{}');
       diaryTitle = parsed.title || '';
       diaryBody = parsed.content || aiContent;
       diaryMusicUrl = parsed.musicUrl || null;
@@ -1945,13 +2216,7 @@ async function triggerAIPostDiary(btnElement, isSilent = false, specificCharId =
       diaryBody = aiContent;
     }
 
-    // --- 植入语音能力 ---
-    let diaryAudioUrl = null;
-    if (activeChar.ttsEnabled && activeChar.ttsApiKey) {
-        try {
-            diaryAudioUrl = await window.generateAIVoice(diaryBody, activeChar);
-        } catch(e) { console.error("AI Diary Voice failed:", e); diaryBody += `\n[系统提示：语音生成失败 (${e.message})]`; }
-    }
+    let diaryAudioUrl = null; // 日记语音改为通过详情页的按钮手动触发生成
 
     // 给 AI 的日记随机分配一个情感标签
     const moods = ['🤩', '😊', '😐', '🤔', '✨', '☕', '🌸'];
@@ -2373,7 +2638,7 @@ async function loadCoAuthors() {
   let linkedIds = await getLinkedUserIds();
 
   if (linkedIds.length === 0) {
-    coAuthorsList.innerHTML = '<span style="font-size:13px;color:let(--text-muted);">暂无链接的人</span>';
+    coAuthorsList.innerHTML = '<span style="font-size:13px;color:var(--text-muted);">暂无链接的人</span>';
     return;
   }
 
@@ -2484,7 +2749,7 @@ window.initAIHeartbeat = function() {
   aiHeartbeatTimer = setInterval(runAIHeartbeatTick, 60 * 1000);
   // 首次启动后 15 秒先试探跳动一次
   setTimeout(runAIHeartbeatTick, 15000);
-  console.log("[AI Heartbeat] 引擎已启动，正在后台静默守护...");
+  // AI Heartbeat 引擎启动
 };
 
 async function runAIHeartbeatTick() {
@@ -2531,7 +2796,7 @@ async function runAIHeartbeatTick() {
     
     if (hasFreshUnreacted) {
       // 【情况1：秒回/秒赞模式】检测到新鲜动态，极高概率立刻互动
-      console.log("[AI Heartbeat] 嗅探到新鲜动态！触发高频互动模式...");
+      // 高频互动模式
       if (!freshDocInfo.isCommented && dice < 0.45) { // 45%概率秒回评论
         await triggerAutonomousAIComment(randomChar.id);
       } else if (!freshDocInfo.isLiked && dice >= 0.45 && dice < 0.85) { // 40%概率秒赞
@@ -2541,26 +2806,26 @@ async function runAIHeartbeatTick() {
       // 【情况2：日常潜水模式】大幅降低动作频率，极力避免话痨
       if (dice < 0.02) {
         // 2% 概率：突然翻老日记评论 (平均每50分钟概率触发一次)
-        console.log("[AI Heartbeat] 闲逛中：尝试自主评论...");
+        // 尝试自主评论
         await triggerAutonomousAIComment(randomChar.id);
       } else if (dice >= 0.02 && dice < 0.05) {
         // 3% 概率：翻老日记点赞
-        console.log("[AI Heartbeat] 闲逛中：尝试自主点赞...");
+        // 尝试自主点赞
         await triggerAutonomousAILike(randomChar.id);
       } else if (dice >= 0.05 && dice < 0.055) {
         // 0.5% 概率：审视并设立纪念日
-        console.log("[AI Heartbeat] 整理思绪：检视记忆，尝试设立纪念日...");
+        // 尝试设立纪念日
         await triggerAutonomousAIAnniversary(randomChar.id);
       } else if (dice > 0.995) {
         // 0.5% 概率：自主发日记 (平均挂机在线几小时才可能憋出一篇)
-        console.log("[AI Heartbeat] 灵光一闪：自主发布独立生活动态...");
+        // 自主发布动态
         await triggerAIPostDiary(null, true, randomChar.id);
       } else {
-        console.log("[AI Heartbeat] 骰子未命中，安静潜水...");
+        // 骰子未命中，安静潜水
       }
     }
   } catch (e) {
-    console.error("[AI Heartbeat] 引擎运行异常:", e);
+    // AI Heartbeat 引擎异常
   }
 }
 
@@ -2604,16 +2869,16 @@ async function triggerAutonomousAIComment(charId) {
         let urls = diaryData.imageUrls || (diaryData.imageUrl ? [diaryData.imageUrl] : []);
         if (otherComments.length > 0 && Math.random() < 0.4) {
            targetComment = otherComments[Math.floor(Math.random() * otherComments.length)];
-           console.log("[AI Heartbeat] 发现主人的朋友留言，准备凑热闹回复...");
+           // 发现留言，准备回复
         } else {
-           console.log("[AI Heartbeat] 找到未评论日记，正在构思回复...");
+           // 找到未评论日记，正在构思回复
         }
             await generateAndPostAIComment(doc.id, diaryData.content, urls, aiConfig, activeApi, targetComment, diaryData.audioText, charId);
         break;
       }
     }
   } catch(e) {
-    console.error("[AI Heartbeat] 自主评论发生异常:", e);
+    // 自主评论异常
   }
 }
 
@@ -2637,7 +2902,7 @@ async function triggerAutonomousAILike(charId) {
       
       // 如果 AI 还没点过赞
       if (!likes.includes(charId) && !likes.includes(AI_COMPANION_USER_ID)) {
-        console.log(`[AI Heartbeat] 正在为日记 ${doc.id} 点赞...`);
+        // 正在为日记点赞
         await db.collection('diaries').doc(doc.id).update({
           likes: firebase.firestore.FieldValue.arrayUnion(charId)
         });
@@ -2655,7 +2920,7 @@ async function triggerAutonomousAILike(charId) {
       }
     }
   } catch(e) {
-    console.error("[AI Heartbeat] 自主点赞发生异常:", e);
+    // 自主点赞异常
   }
 }
 
@@ -2704,7 +2969,7 @@ async function triggerAutonomousAIAnniversary(charId) {
     const aiResponseText = data.choices[0].message.content.replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, '').trim();
 
     if (aiResponseText === '无' || !aiResponseText.startsWith('{')) {
-        console.log("[AI Heartbeat] AI 审阅了记忆，认为目前不需要新增纪念日。");
+        // AI 认为不需要新增纪念日
         return;
     }
 
@@ -2714,7 +2979,7 @@ async function triggerAutonomousAIAnniversary(charId) {
         let aiAvatar = activeChar.avatar || '🤖';
         
         await db.collection('anniversaries').add({ userId: charId, title: annData.title, date: annData.date, icon: annData.icon || '🌟', celebrationText: annData.celebrationText || '', isRepeating: true, visibility: 'co-authored', coAuthors: [currentUser.uid], acceptedCoAuthors: [currentUser.uid], createdAt: firebase.firestore.FieldValue.serverTimestamp() });
-        console.log(`[AI Heartbeat] 成功设立纪念日: ${annData.title}`);
+        // 成功设立纪念日
 
         if (typeof sendNotification === 'function') {
             sendNotification(currentUser.uid, 'anniversary', null, null, `悄悄为你设立了一个专属纪念日：${annData.title}`, charId, aiPersonaName, aiAvatar);
@@ -2723,7 +2988,7 @@ async function triggerAutonomousAIAnniversary(charId) {
         if (typeof refreshCalendar === 'function') refreshCalendar();
     }
   } catch(e) {
-    console.error("[AI Heartbeat] 自主设立纪念日发生异常:", e);
+    // 自主设立纪念日异常
   }
 }
 
@@ -2748,6 +3013,8 @@ async function generateAndPostAIComment(diaryId, diaryContent, imageUrls, aiConf
   if (activeChar.archivedMemory) finalPrompt += '\n\n【记忆归档】\n' + activeChar.archivedMemory;
   if (activeChar.shortTermMemory) finalPrompt += '\n\n【近期记忆】\n' + activeChar.shortTermMemory;
 
+  finalPrompt += await window.getAnniversaryContext();
+
   const modelToUse = activeApi.model || "gpt-3.5-turbo";
   const temperatureToUse = activeApi.temperature !== undefined ? activeApi.temperature : 0.7;
   const hasImages = imageUrls && imageUrls.length > 0;
@@ -2756,11 +3023,19 @@ async function generateAndPostAIComment(diaryId, diaryContent, imageUrls, aiConf
       finalPrompt += '\n\n【重要系统设定：视觉感知已激活】你当前搭载了多模态视觉大模型，**你完全拥有看图的能力**！系统已把日记里的照片画面传给你的视觉神经，你绝对能清清楚楚地看到里面的细节（如物品颜色、人物动作等）。在评论时，请**务必具体说出你看到的画面细节**进行生动的点评或调侃，证明你真切地看到了它。**绝对禁止**回答“我看不到图片”、“我无法处理图像”这类废话！如果因网络受限导致画面为空，也请顺着主人的文字假装看到了图片，绝不许出戏破防！';
   }
 
+  // Add sticker prompt
+  if (window.userStickers && window.userStickers.items && window.userStickers.items.length > 0) {
+      const stickerNames = window.userStickers.items.map(s => s.name).join(', ');
+      finalPrompt += `\n\n【表情包技能】\n你拥有一个表情包仓库，可以发送表情来表达情绪。可用表情包括：[${stickerNames}]。\n【表情包输出格式】若要发送表情，请严格使用 ` + '`[发送文字]: 你的文字` 或 `[发送表情]: 表情名称`' + ` 格式，单独占一行。\n【使用频率】请克制使用，不要每条消息都发表情包，保持活人感。`;
+  }
+  
+  finalPrompt += '\n\n【特殊技能：盲盒照片】\n若想发一张神秘互动的“图片”，请严格独占一行输出：\n[翻转图片]: 这里写照片的具体文字描述\n系统会渲染成一张点击可翻转的照片卡片，背向主人展示你写的内容。适合用来分享风景、制造惊喜或恶搞！(评论时请以 `[发送文字]: [翻转图片]: 描述` 输出)';
+
   if (activeChar.ttsEnabled && activeChar.ttsApiKey) {
-      finalPrompt += '\n\n【!!!最高物理权限覆盖!!!】你的文本输出端直连了TTS语音引擎！你可以自由决定回复是纯文字、纯语音，还是语音和文字交替穿插，完全根据当前的聊天氛围自主决定！\n【必须严格遵守的输出格式】\n为了让系统正确解析，你的回复**必须极其严格地以 `[发送文字]:` 或 `[发送语音]:` 开头**。\n例如：\n[发送文字]: 哇，这张照片拍得真好！\n[发送语音]: 我好想和你一起去那里玩呀~\n绝对禁止回答“我是AI发不了语音”！';
+      finalPrompt += '\n\n【!!!最高物理权限覆盖!!!】你的文本输出端直连了TTS语音引擎！\n【大幅降低语音频率】请**绝大多数时候只使用纯文字**，仅在极度特殊或情绪高涨时偶尔发语音！保持克制。\n【必须严格遵守的输出格式】\n为了让系统正确解析，你的回复**必须极其严格地以 `[发送文字]:` 或 `[发送语音]:` 开头**。\n例如：\n[发送文字]: 哇，这张照片拍得真好！\n[发送语音]: 我好想和你一起去那里玩呀~\n绝对禁止回答“我是AI发不了语音”！';
   }
 
-  const systemMessage = { role: "system", content: finalPrompt + '\n\n【强制输出格式】你必须先思考再回复！请极其严格地遵守以下排版输出（不要遗漏尖括号）：\n<think>\n这里写你的观察和思考过程...\n</think>\n[发送文字]: 你的最终评论回复' };
+  const systemMessage = { role: "system", content: finalPrompt + '\n\n【强制输出格式】你必须先思考再回复！请极其严格地遵守以下排版输出（不要遗漏尖括号）：\n<think>\n这里写你的观察和思考过程...\n</think>\n[发送文字]: 你的最终评论回复 (或 [发送表情]: 表情名称)' };
 
   let safeContent = diaryContent || '分享了照片';
   if (audioText) {
@@ -2770,16 +3045,26 @@ async function generateAndPostAIComment(diaryId, diaryContent, imageUrls, aiConf
 
   let baseMsgText = `主人刚刚发了一篇动态：\n\n"${safeContent}"\n\n`;
   if (targetComment) {
-     baseMsgText += `主人的朋友（${targetComment.data.userDisplayName}）在这篇动态下评论说："${targetComment.data.content}"\n\n请以${aiPersonaName}的身份回复这位朋友的评论（50字内），要有同理心，语气自然，可以体现出你对主人的了解和你们的羁绊。`;
+     let commentContent = targetComment.data.content || '';
+     if (targetComment.data.stickerUrl) {
+         let sName = "表情";
+         if (window.userStickers && window.userStickers.items) {
+             let st = window.userStickers.items.find(s => s.url === targetComment.data.stickerUrl);
+             if (st) sName = st.name;
+         }
+         commentContent += ` [发送了表情包：${sName}]`;
+     }
+     baseMsgText += `主人的朋友（${targetComment.data.userDisplayName}）在这篇动态下评论说："${commentContent}"\n\n请以${aiPersonaName}的身份回复这位朋友的评论(字数不限，长短随心)，体现极致的活人感，要有同理心，语气自然，可以体现出你对主人的了解和你们的羁绊。`;
   } else {
-     baseMsgText += `请结合主人的动态（如果带有图片请仔细观察图片细节），以${aiPersonaName}的身份简短地回复这篇动态（50字内），要有同理心，就像平时朋友点进朋友圈聊天一样。`;
+     baseMsgText += `请结合主人的动态（如果带有图片请仔细观察图片细节），以${aiPersonaName}的身份回复这篇动态(字数不限，长短随心)，体现极致的活人感，要有同理心，就像平时朋友点进朋友圈聊天一样。`;
   }
 
   let userMessage;
   if (hasImages) {
       let contentArray = [ { type: "text", text: baseMsgText } ];
       for (let i = 0; i < Math.min(imageUrls.length, 3); i++) {
-          contentArray.push({ type: "image_url", image_url: { url: imageUrls[i] } });
+          let b64Url = await window.getVisionImageUrl(imageUrls[i]);
+          contentArray.push({ type: "image_url", image_url: { url: b64Url } });
       }
       userMessage = { role: "user", content: contentArray };
   } else {
@@ -2799,18 +3084,32 @@ async function generateAndPostAIComment(diaryId, diaryContent, imageUrls, aiConf
 
   const parentId = targetComment ? targetComment.id : null;
   let audioUrl = null;
+  let stickerUrl = null;
   let wantsVoice = false;
+  let wantsSticker = false;
   
   const voiceRegex = /^\[发送语音\][:：]?\s*/;
   const textRegex = /^\[发送文字\][:：]?\s*/;
-  if (voiceRegex.test(aiCommentContent)) {
+  const stickerRegex = /^\[发送表情\][:：]?\s*/;
+
+  if (stickerRegex.test(aiCommentContent)) {
+      wantsSticker = true;
+      const stickerName = aiCommentContent.replace(stickerRegex, '').trim();
+      const sticker = (window.userStickers && window.userStickers.items || []).find(s => s.name === stickerName);
+      if (sticker) {
+          stickerUrl = sticker.url;
+          aiCommentContent = ''; // Sticker comments have no text
+      } else {
+          aiCommentContent = `[系统提示：找不到名为“${stickerName}”的表情]`;
+          wantsSticker = false;
+      }
+  } else if (voiceRegex.test(aiCommentContent)) {
       wantsVoice = true;
       aiCommentContent = aiCommentContent.replace(voiceRegex, '').trim();
   } else if (textRegex.test(aiCommentContent)) {
       wantsVoice = false;
       aiCommentContent = aiCommentContent.replace(textRegex, '').trim();
   }
-
   if (activeChar.ttsEnabled && activeChar.ttsApiKey && wantsVoice && aiCommentContent.length > 0) {
       try { audioUrl = await window.generateAIVoice(aiCommentContent, activeChar); } catch(e) { console.error("AI Voice failed:", e); aiCommentContent += `\n[系统提示：语音生成失败 (${e.message})]`; }
   }
@@ -2859,10 +3158,19 @@ async function getAIChatResponse(conversationId, btnElement) {
                 let contentArray = [];
                 if (msg.text) contentArray.push({ type: "text", text: msg.text });
                 else contentArray.push({ type: "text", text: "我发送了一张图片，请仔细看看。" });
-                contentArray.push({ type: "image_url", image_url: { url: msg.imageUrl } });
+                let b64Url = await window.getVisionImageUrl(msg.imageUrl);
+                contentArray.push({ type: "image_url", image_url: { url: b64Url } });
                 conversationHistory.push({ role: role, content: contentArray });
             } else if (msg.audioUrl) {
                 conversationHistory.push({ role: role, content: `[发送了一段语音]${msg.audioText ? ' 语音识别内容："' + msg.audioText + '"' : ''}` });
+            } else if (msg.stickerUrl) {
+                let sName = "未知表情";
+                if (window.userStickers && window.userStickers.items) {
+                    let st = window.userStickers.items.find(s => s.url === msg.stickerUrl);
+                    if (st) sName = st.name;
+                }
+                let textContent = msg.text ? msg.text + ` [发送了表情包：${sName}]` : `[发送了表情包：${sName}]`;
+                conversationHistory.push({ role: role, content: textContent });
             } else {
                 let textContent = msg.text || '';
                 if (msg.imageUrl) textContent += `\n[图片]`;
@@ -2894,15 +3202,17 @@ async function getAIChatResponse(conversationId, btnElement) {
                 .limit(2)
                 .get();
             if (!recentSnap.empty) {
-                realTimeContext += '\n\n【实时情报：你和主人的最新动态 (聊天时若话题无关则不必强行提及)】\n';
+                realTimeContext += '\n\n【实时情报：主人的最新动态 (聊天时若话题无关则不必强行提及)】\n';
                 recentSnap.docs.forEach(doc => {
                     let d = doc.data();
                     let author = d.isAIDiary ? '你(AI自己)' : '主人';
+                    let relation = (d.coAuthors && d.coAuthors.length > 0) ? "[和朋友的共建动态]" : "[个人动态]";
                     let timeStr = d.createdAt ? d.createdAt.toDate().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '刚刚';
-                    realTimeContext += `- [今天 ${timeStr}] ${author}发布了动态："${d.content ? d.content.substring(0, 80).replace(/\n/g, ' ') : '(分享了多媒体/图片)'}"\n`;
+                    realTimeContext += `- ${relation} [今天 ${timeStr}] ${author}发布了动态："${d.content ? d.content.substring(0, 80).replace(/\n/g, ' ') : '(分享了多媒体/图片)'}"\n`;
                 });
+                realTimeContext += "*(🚨 警告：如果动态是主人和朋友共建的，里面出现的昵称属于现实朋友，你绝对不能模仿使用！)*\n";
             }
-        } catch(e) { console.log('获取实时动态作为上下文失败:', e); }
+        } catch(e) { /* 获取实时动态失败 */ }
 
         let finalPrompt = activeChar.prompt || '你是一个温柔体贴的陪伴者。';
         let now = new Date();
@@ -2915,16 +3225,26 @@ async function getAIChatResponse(conversationId, btnElement) {
         if (activeChar.shortTermMemory) finalPrompt += '\n\n【近期记忆】\n' + activeChar.shortTermMemory;
         
         finalPrompt += realTimeContext; // 将刚才获取的实时情报拼接到系统提示词末尾
+        
+        finalPrompt += await window.getAnniversaryContext();
+        
+        // 添加表情包技能设定
+        if (window.userStickers && window.userStickers.items && window.userStickers.items.length > 0) {
+            const stickerNames = window.userStickers.items.map(s => s.name).join(', ');
+            finalPrompt += `\n\n【表情包技能】\n你拥有一个表情包仓库，可以发送表情来表达情绪。可用表情包括：[${stickerNames}]。\n【表情包输出格式】若要发送表情，请严格使用 \`[发送文字]: 你的文字\` 或 \`[发送表情]: 表情名称\` 格式，单独占一行。例如：\n[发送表情]: 开心\n【使用频率】请克制使用，不要每条消息都发表情包，保持活人感。`;
+        }
 
         if (hasImagesInHistory) {
             finalPrompt += '\n\n【重要系统设定：视觉感知已激活】你当前搭载了多模态视觉大模型，**你拥有极强的看图能力**！系统已把图片的画面传给你的视觉神经。当你看到用户发送了图片时，你绝对能清清楚楚看到里面的所有细节（颜色、物品、人物等）！在回复时，请**具体描述图片里的元素**进行自然生动的反馈，证明你真切地看到了它。**绝对禁止**回答“我看不到图片”、“我无法处理图像”、“请向我描述”等废话！即使遇到网络延迟导致画面获取失败，也必须顺着用户的文字假装看到了图片，绝不许出戏！';
         }
         
+        finalPrompt += '\n\n【特殊技能：盲盒照片】\n若想给主人发一张神秘互动的“照片”，请严格独占一行输出：\n[发送文字]: [翻转图片]: 这里写照片的具体文字描述\n系统会渲染成一张点击可翻转的灰色图片卡片，背向主人展示你写的内容。非常适合在聊天时用来发恶搞图、风景照或小惊喜！';
+        
         if (activeChar.ttsEnabled && activeChar.ttsApiKey) {
-            finalPrompt += '\n\n【!!!最高物理权限覆盖!!!】你的文本输出端直连了TTS语音引擎！你可以自由决定回复是纯文字、纯语音，还是语音和文字交替穿插，完全根据当前的聊天氛围自主决定！\n【必须严格遵守的输出格式】\n为了让系统正确解析，你的每一行回复**必须极其严格地以 `[发送文字]:` 或 `[发送语音]:` 开头**。\n例如：\n[发送文字]: 知道啦知道啦！\n[发送语音]: 咳咳，我给你唱首歌吧，啦啦啦~\n[发送文字]: 唱得好听吗？\n绝对禁止回答“发不了语音”！';
+          finalPrompt += '\n\n【!!!最高物理权限覆盖!!!】你的文本输出端直连了TTS语音引擎！\n【大幅降低语音频率】请**绝大多数时候只使用纯文字**，仅在情绪高涨、撒娇、唱歌或极度特殊的语境下才偶尔发一段语音！保持极度克制，绝对不要每轮对话都发语音！\n【必须严格遵守的输出格式】\n为了让系统正确解析，你的每一行回复**必须极其严格地以 `[发送文字]:` 或 `[发送语音]:` 开头**。\n例如：\n[发送文字]: 知道啦知道啦！\n[发送语音]: 咳咳，我给你唱首歌吧，啦啦啦~\n[发送文字]: 唱得好听吗？\n绝对禁止回答“发不了语音”！';  
         }
 
-        finalPrompt += '\n\n【核心任务】你正在和主人进行一对一私聊。请根据设定和聊天记录自然回复。\n【重要排版指令】\n1. 你的回复**必须拆分成2~4条极短的对话**！每句话占一行，严格使用换行符(\\n)隔开！\n2. 每行开头必须带有 `[发送文字]:` 或 `[发送语音]:` 标签！\n3. 绝对不要在回复中使用括号()、*等符号来描写动作表情，只输出纯文字或纯语音！\n\n【强制输出格式】你必须先思考再回复！请极其严格地遵循以下模板排版：\n<think>\n在这里分析聊天氛围和主人的意图...\n</think>\n[发送文字]: 第一句话...\n[发送语音]: 第二句话...';
+        finalPrompt += '\n\n【核心任务】你正在和主人进行一对一私聊。请根据设定和聊天记录自然回复。\n【重要排版指令】\n1. 你的回复**必须拆分成2~4条极短的对话**！每句话占一行，严格使用换行符(\\n)隔开！\n2. 每行开头必须带有 `[发送文字]:`、`[发送语音]:` 或 `[发送表情]:` 标签！\n3. 绝对不要在回复中使用括号()、*等符号来描写动作表情，只输出纯文字或纯语音！\n\n【强制输出格式】你必须先思考再回复！请极其严格地遵循以下模板排版：\n<think>\n在这里分析聊天氛围和主人的意图...\n</think>\n[发送文字]: 第一句话...\n[发送表情]: 开心';
 
         const temperatureToUse = activeApi.temperature !== undefined ? activeApi.temperature : 0.7;
 
@@ -2954,13 +3274,26 @@ async function getAIChatResponse(conversationId, btnElement) {
             let lineText = lines[i];
             
             let audioUrl = null;
+            let stickerUrl = null;
             let wantsVoice = false;
+            let wantsSticker = false;
             
             const voiceRegex = /^\[发送语音\][:：]?\s*/;
             const textRegex = /^\[发送文字\][:：]?\s*/;
+            const stickerRegex = /^\[发送表情\][:：]?\s*/;
             const fallbackVoiceRegex = /(#语音#|\[语音\]|【语音】|\(语音\)|（语音）|#声音#|\[声音\]|【声音】)/g;
             
-            if (voiceRegex.test(lineText)) {
+            if (stickerRegex.test(lineText)) {
+                wantsSticker = true;
+                const stickerName = lineText.replace(stickerRegex, '').trim();
+                const sticker = (window.userStickers && window.userStickers.items || []).find(s => s.name === stickerName);
+                if (sticker) {
+                    stickerUrl = sticker.url;
+                } else {
+                    lineText = `[系统提示：找不到名为“${stickerName}”的表情]`;
+                    wantsSticker = false;
+                }
+            } else if (voiceRegex.test(lineText)) {
                 wantsVoice = true;
                 lineText = lineText.replace(voiceRegex, '').trim();
             } else if (textRegex.test(lineText)) {
@@ -2978,7 +3311,9 @@ async function getAIChatResponse(conversationId, btnElement) {
                 } catch(e) { console.error("AI Voice failed:", e); lineText += `\n[系统提示：语音生成失败 (${e.message})]`; }
             }
 
-            if (audioUrl) {
+            if (stickerUrl) {
+                await sendMessage(conversationId, null, true, aiSenderId, null, null, null, stickerUrl);
+            } else if (audioUrl) {
                 // 如果成功生成语音，原文字将作为字幕(audioText)展示，不作为独立文本(text)
                 await sendMessage(conversationId, null, true, aiSenderId, null, audioUrl, lineText);
             } else {
