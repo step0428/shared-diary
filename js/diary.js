@@ -1627,7 +1627,7 @@ async function triggerAIReplyToComment(diaryId, targetCommentId, userContent, ai
     // Add sticker prompt
     if (window.userStickers && window.userStickers.items && window.userStickers.items.length > 0) {
         const stickerNames = window.userStickers.items.map(s => s.name).join(', ');
-        finalPrompt += `\n\n【表情包技能】\n你拥有一个表情包仓库，可以发送表情来表达情绪。可用表情包括：[${stickerNames}]。\n【表情包输出格式】若要发送表情，请严格使用 ` + '`[发送文字]: 你的文字` 或 `[发送表情]: 表情名称`' + ` 格式，单独占一行。\n【使用频率】请克制使用，不要每条消息都发表情包，保持活人感。`;
+        finalPrompt += `\n\n【表情包技能】\n你拥有一个表情包仓库，可用表情列表为：[${stickerNames}]。\n【表情包输出格式】若要发送表情，请严格使用 \`[发送文字]: 你的文字\` 或 \`[发送表情]: 列表中的表情名称\` 格式，单独占一行。\n【系统警告】**绝对禁止捏造不存在的表情名称！只能且必须从上述提供的列表中精确复制名称！**\n【使用频率】请克制使用，保持活人感。`;
     }
     
     finalPrompt += '\n\n【特殊技能：盲盒照片】\n若想发一张神秘互动的“图片”，请严格独占一行输出：\n[翻转图片]: 这里写照片的具体文字描述\n系统会渲染成一张点击可翻转的照片卡片，背向主人展示你写的内容。适合用来分享风景、制造惊喜或恶搞！(聊天/回复时请以 `[发送文字]: [翻转图片]: 描述` 输出)';
@@ -1656,6 +1656,11 @@ async function triggerAIReplyToComment(diaryId, targetCommentId, userContent, ai
     if (!response.ok) return;
     const data = await response.json();
     let aiResponseText = data.choices[0].message.content.replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, '').trim();
+    // 防泄漏绝招：如果模型忘记闭合思考标签，直接截取真正的回复起点
+    const sendTagMatch = aiResponseText.match(/\[发送(?:文字|语音|表情)\]/);
+    if (sendTagMatch && sendTagMatch.index > 0) {
+        aiResponseText = aiResponseText.substring(sendTagMatch.index).trim();
+    }
 
     let audioUrl = null;
     let stickerUrl = null;
@@ -1865,7 +1870,7 @@ async function askAIToComment(diaryId, diaryContent, imageUrls = [], diaryOwnerI
     // Add sticker prompt
     if (window.userStickers && window.userStickers.items && window.userStickers.items.length > 0) {
         const stickerNames = window.userStickers.items.map(s => s.name).join(', ');
-        finalPrompt += `\n\n【表情包技能】\n你拥有一个表情包仓库，可以发送表情来表达情绪。可用表情包括：[${stickerNames}]。\n【表情包输出格式】若要发送表情，请严格使用 ` + '`[发送文字]: 你的文字` 或 `[发送表情]: 表情名称`' + ` 格式，单独占一行。\n【使用频率】请克制使用，不要每条消息都发表情包，保持活人感。`;
+        finalPrompt += `\n\n【表情包技能】\n你拥有一个表情包仓库，可用表情列表为：[${stickerNames}]。\n【表情包输出格式】若要发送表情，请严格使用 \`[发送文字]: 你的文字\` 或 \`[发送表情]: 列表中的表情名称\` 格式，单独占一行。\n【系统警告】**绝对禁止捏造不存在的表情名称！只能且必须从上述提供的列表中精确复制名称！**\n【使用频率】请克制使用，保持活人感。`;
     }
 
     if (activeChar.ttsEnabled && activeChar.ttsApiKey) {
@@ -1879,7 +1884,7 @@ async function askAIToComment(diaryId, diaryContent, imageUrls = [], diaryOwnerI
 
     const systemMessage = {
       role: "system",
-      content: finalPrompt + '\n\n【强制输出格式】你必须先思考再回复！请极其严格地遵守以下排版输出（绝不能遗漏尖括号）：\n<think>\n这里写你的观察和思考过程...\n</think>\n[发送文字]: 你的最终评论回复 (或 [发送表情]: 表情名称)'
+      content: finalPrompt + '\n\n【!!!强制输出格式!!!】你必须先思考再回复！你**必须极其严格地以 `<think>` 作为整个回复的绝对开头，以 `</think>` 结束思考**！绝对不能遗漏尖括号 `<` 和 `>`！在 `</think>` 之后，再输出排版：\n<think>\n这里写你的观察和思考过程...\n</think>\n[发送文字]: 你的最终评论回复 (或 [发送表情]: 表情名称)'
     };
 
     // 辨别日记主人身份
@@ -1934,19 +1939,25 @@ async function askAIToComment(diaryId, diaryContent, imageUrls = [], diaryOwnerI
 
     const data = await response.json();
     let aiCommentContent = data.choices[0].message.content.replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, '').trim();
+    // 防泄漏绝招
+    const sendTagMatch = aiCommentContent.match(/\[发送(?:文字|语音|表情)\]/);
+    if (sendTagMatch && sendTagMatch.index > 0) {
+        aiCommentContent = aiCommentContent.substring(sendTagMatch.index).trim();
+    }
 
     let audioUrl = null;
     let stickerUrl = null;
     let wantsVoice = false;
     let wantsSticker = false;
     
-    const voiceRegex = /^\[发送语音\][:：]?\s*/;
-    const textRegex = /^\[发送文字\][:：]?\s*/;
-    const stickerRegex = /^\[发送表情\][:：]?\s*/;
+    const voiceRegex = /\[发送语音\][:：]?\s*/;
+    const textRegex = /\[发送文字\][:：]?\s*/g;
+    const stickerRegex = /\[发送表情\][:：]?\s*(.+)/;
 
     if (stickerRegex.test(aiCommentContent)) {
         wantsSticker = true;
-        const stickerName = aiCommentContent.replace(stickerRegex, '').trim();
+        const match = aiCommentContent.match(stickerRegex);
+        const stickerName = match ? match[1].trim() : '';
         const sticker = (window.userStickers && window.userStickers.items || []).find(s => s.name === stickerName);
         if (sticker) {
             stickerUrl = sticker.url;
@@ -1957,8 +1968,8 @@ async function askAIToComment(diaryId, diaryContent, imageUrls = [], diaryOwnerI
         }
     } else if (voiceRegex.test(aiCommentContent)) {
         wantsVoice = true;
-        aiCommentContent = aiCommentContent.replace(voiceRegex, '').trim();
-    } else if (textRegex.test(aiCommentContent)) {
+        aiCommentContent = aiCommentContent.replace(voiceRegex, '').replace(textRegex, '').trim();
+    } else {
         wantsVoice = false;
         aiCommentContent = aiCommentContent.replace(textRegex, '').trim();
     }
@@ -3047,7 +3058,7 @@ async function generateAndPostAIComment(diaryId, diaryContent, imageUrls, aiConf
   // Add sticker prompt
   if (window.userStickers && window.userStickers.items && window.userStickers.items.length > 0) {
       const stickerNames = window.userStickers.items.map(s => s.name).join(', ');
-      finalPrompt += `\n\n【表情包技能】\n你拥有一个表情包仓库，可以发送表情来表达情绪。可用表情包括：[${stickerNames}]。\n【表情包输出格式】若要发送表情，请严格使用 ` + '`[发送文字]: 你的文字` 或 `[发送表情]: 表情名称`' + ` 格式，单独占一行。\n【使用频率】请克制使用，不要每条消息都发表情包，保持活人感。`;
+      finalPrompt += `\n\n【表情包技能】\n你拥有一个表情包仓库，可用表情列表为：[${stickerNames}]。\n【表情包输出格式】若要发送表情，请严格使用 \`[发送文字]: 你的文字\` 或 \`[发送表情]: 列表中的表情名称\` 格式，单独占一行。\n【系统警告】**绝对禁止捏造不存在的表情名称！只能且必须从上述提供的列表中精确复制名称！**\n【使用频率】请克制使用，保持活人感。`;
   }
   
   finalPrompt += '\n\n【特殊技能：盲盒照片】\n若想发一张神秘互动的“图片”，请严格独占一行输出：\n[翻转图片]: 这里写照片的具体文字描述\n系统会渲染成一张点击可翻转的照片卡片，背向主人展示你写的内容。适合用来分享风景、制造惊喜或恶搞！(评论时请以 `[发送文字]: [翻转图片]: 描述` 输出)';
@@ -3102,6 +3113,11 @@ async function generateAndPostAIComment(diaryId, diaryContent, imageUrls, aiConf
   if (!response.ok) throw new Error('API Error');
   const data = await response.json();
   let aiCommentContent = data.choices[0].message.content.replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, '').trim();
+  // 防泄漏绝招
+  const sendTagMatch = aiCommentContent.match(/\[发送(?:文字|语音|表情)\]/);
+  if (sendTagMatch && sendTagMatch.index > 0) {
+      aiCommentContent = aiCommentContent.substring(sendTagMatch.index).trim();
+  }
 
   const parentId = targetComment ? targetComment.id : null;
   let audioUrl = null;
@@ -3253,7 +3269,7 @@ async function getAIChatResponse(conversationId, btnElement) {
         // 添加表情包技能设定
         if (window.userStickers && window.userStickers.items && window.userStickers.items.length > 0) {
             const stickerNames = window.userStickers.items.map(s => s.name).join(', ');
-            finalPrompt += `\n\n【表情包技能】\n你拥有一个表情包仓库，可以发送表情来表达情绪。可用表情包括：[${stickerNames}]。\n【表情包输出格式】若要发送表情，请严格使用 \`[发送文字]: 你的文字\` 或 \`[发送表情]: 表情名称\` 格式，单独占一行。例如：\n[发送表情]: 开心\n【使用频率】请克制使用，不要每条消息都发表情包，保持活人感。`;
+            finalPrompt += `\n\n【表情包技能】\n你拥有一个表情包仓库，可用表情列表为：[${stickerNames}]。\n【表情包输出格式】若要发送表情，请严格使用 \`[发送文字]: 你的文字\` 或 \`[发送表情]: 列表中的表情名称\` 格式，单独占一行。例如：\n[发送表情]: 开心\n【系统警告】**绝对禁止捏造不存在的表情名称！只能且必须从上述提供的列表中精确复制名称！**\n【使用频率】请克制使用，保持活人感。`;
         }
 
         if (hasImagesInHistory) {
@@ -3284,6 +3300,11 @@ async function getAIChatResponse(conversationId, btnElement) {
         }
         const data = await response.json();
         let aiResponseText = data.choices[0].message.content.replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, '').trim();
+        // 防泄漏绝招
+        const sendTagMatch = aiResponseText.match(/\[发送(?:文字|语音|表情)\]/);
+        if (sendTagMatch && sendTagMatch.index > 0) {
+            aiResponseText = aiResponseText.substring(sendTagMatch.index).trim();
+        }
         if (!aiResponseText) aiResponseText = "...";
 
         const convRef = db.collection('conversations').doc(conversationId);
