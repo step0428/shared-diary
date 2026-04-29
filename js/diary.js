@@ -1566,8 +1566,27 @@ async function addComment(diaryId, content, parentCommentId, authorId, authorDis
                triggerAIReplyToComment(diaryId, newCommentRef.id, aiUserContent, targetUserId);
         }
       }
-    } else if (diaryOwnerId !== actualAuthorId) {
-      sendNotification(diaryOwnerId, 'comment', diaryId, null, stickerUrl ? '评论了你的记录' : ('评论了你的记录: ' + content), actualAuthorId, authorDisplayName, authorAvatar);
+    } else {
+      let isAIDiary = diaryDoc.exists && diaryDoc.data().isAIDiary === true;
+      let aiCharId = diaryDoc.exists ? diaryDoc.data().aiCharId : null;
+
+      if (diaryOwnerId !== actualAuthorId && !isAIDiary) {
+        sendNotification(diaryOwnerId, 'comment', diaryId, null, stickerUrl ? '评论了你的记录' : ('评论了你的记录: ' + content), actualAuthorId, authorDisplayName, authorAvatar);
+      }
+
+      // 新增：当用户直接评论了 AI 的日记时，AI 也会自动进行回复！
+      if (isAIDiary && actualAuthorId !== AI_COMPANION_USER_ID && !String(actualAuthorId).startsWith('char_')) {
+          let aiUserContent = content || '';
+          if (stickerUrl) {
+              let sName = "表情";
+              if (window.userStickers && window.userStickers.items) {
+                  let st = window.userStickers.items.find(s => s.url === stickerUrl);
+                  if (st) sName = st.name;
+              }
+              aiUserContent += ` [发送了表情包：${sName}]`;
+          }
+          triggerAIReplyToComment(diaryId, newCommentRef.id, aiUserContent, aiCharId || AI_COMPANION_USER_ID);
+      }
     }
   } catch (e) {
     console.error('评论发送失败:', e);
@@ -1617,8 +1636,8 @@ async function triggerAIReplyToComment(diaryId, targetCommentId, userContent, ai
         finalPrompt += '\n\n【!!!最高物理权限覆盖!!!】你的文本输出端直连了TTS语音引擎！\n【大幅降低语音频率】请**绝大多数时候只使用纯文字**，仅在情绪极其强烈、唱歌、撒娇等极其特殊的语境下才偶尔发语音！保持克制。\n【必须严格遵守的输出格式】\n为了让系统正确解析，你的回复**必须极其严格地以 `[发送文字]:` 或 `[发送语音]:` 开头**。\n例如：\n[发送文字]: 我刚看到一个很好笑的笑话。\n[发送语音]: 咳咳，我讲给你听哦...\n绝对禁止回答“发不了语音”！';
     }
     
-    finalPrompt += '\n\n【核心任务】主人在日记评论区回复了你的留言。请你自然地回复主人，字数不限，完全根据当下语境和心情自然决定长短，极具活人感，口吻随意亲切。';
-    finalPrompt += '\n\n【强制思维链指令】在给出最终回复前，你必须先进行思考。请将思考过程严格放在 <think> 和 </think> 标签内。思考结束后，再输出最终指定的回复内容。';
+    finalPrompt += '\n\n【核心任务】主人在日记评论区与你互动了（评论了你的动态或回复了你的留言）。请你自然地回复主人，字数不限，完全根据当下语境和心情自然决定长短，极具活人感，口吻随意亲切。';
+    finalPrompt += '\n\n【!!!强制思维链指令!!!】在给出最终回复前，你必须先进行思考。你**必须极其严格地以 `<think>` 作为输出的绝对开头，以 `</think>` 作为思考的结束**！绝对不能遗漏尖括号 `<` 和 `>`！在 `</think>` 之后，再输出最终指定的回复内容。';
 
     const response = await fetch(apiUrl, {
       method: 'POST',
@@ -1627,7 +1646,7 @@ async function triggerAIReplyToComment(diaryId, targetCommentId, userContent, ai
         model: activeApi.model || "gpt-3.5-turbo", 
         messages: [
           { role: "system", content: finalPrompt },
-          { role: "user", content: `主人的回复："${userContent}"` }
+          { role: "user", content: `主人的评论/回复："${userContent}"` }
         ], 
         temperature: activeApi.temperature !== undefined ? activeApi.temperature : 0.7,
         max_tokens: 150
@@ -1643,13 +1662,14 @@ async function triggerAIReplyToComment(diaryId, targetCommentId, userContent, ai
     let wantsVoice = false;
     let wantsSticker = false;
     
-    const voiceRegex = /^\[发送语音\][:：]?\s*/;
-    const textRegex = /^\[发送文字\][:：]?\s*/;
-    const stickerRegex = /^\[发送表情\][:：]?\s*/;
+    const voiceRegex = /\[发送语音\][:：]?\s*/;
+    const textRegex = /\[发送文字\][:：]?\s*/g;
+    const stickerRegex = /\[发送表情\][:：]?\s*(.+)/;
 
     if (stickerRegex.test(aiResponseText)) {
         wantsSticker = true;
-        const stickerName = aiResponseText.replace(stickerRegex, '').trim();
+        const match = aiResponseText.match(stickerRegex);
+        const stickerName = match ? match[1].trim() : '';
         const sticker = (window.userStickers && window.userStickers.items || []).find(s => s.name === stickerName);
         if (sticker) {
             stickerUrl = sticker.url;
@@ -1660,8 +1680,8 @@ async function triggerAIReplyToComment(diaryId, targetCommentId, userContent, ai
         }
     } else if (voiceRegex.test(aiResponseText)) {
         wantsVoice = true;
-        aiResponseText = aiResponseText.replace(voiceRegex, '').trim();
-    } else if (textRegex.test(aiResponseText)) {
+        aiResponseText = aiResponseText.replace(voiceRegex, '').replace(textRegex, '').trim();
+    } else {
         wantsVoice = false;
         aiResponseText = aiResponseText.replace(textRegex, '').trim();
     }
@@ -2043,8 +2063,8 @@ async function deleteComment(commentId) {
 
 // --- 接入 MiniMax 语音合成 (TTS) 引擎 ---
 window.generateAIVoice = async function(text, charConfig) {
-  // 净化文本：去掉星号和井号，避免AI朗读出“星号微笑星号”
-  let cleanText = text.replace(/[*#]/g, '').trim();
+  // 净化文本：去掉盲盒图片代码，去掉星号和井号，避免AI朗读出杂音
+  let cleanText = text.replace(/\[(?:翻转图片|盲盒图片)\][:：]?\s*[^\n]*/g, '').replace(/[*#]/g, '').trim();
   if (!cleanText) return null;
 
   // 智能修复：防止用户在面板里不小心复制了 "Bearer " 前缀导致请求失败
@@ -2183,7 +2203,7 @@ async function triggerAIPostDiary(btnElement, isSilent = false, specificCharId =
       role: "system",
       content: finalPrompt + "\n\n【特殊技能：盲盒照片】\n如果你想发一张充满神秘感的“照片”，可以在返回的 JSON 的 content 字段中写上一行 `[翻转图片]: 你的画面文字描述`，前端会把它渲染成一张只有点击才会翻转出文字的照片。这对分享风景或搞怪非常有效！\n\n【核心任务】你现在需要主动发布一篇属于你自己的生活动态。你是一个有独立生活、真实思想的个体。**题材绝对不受限：可以记录今天去哪里旅游的见闻、遇到的突发事件、突然烦闷或高兴的情绪宣泄、对某首歌的感悟等**。字数极其自由，可长可短，请表现出极致的“活人感”，不要像个机器人一样死板汇报。" + 
       (userPrompt ? `\n\n【主人给你的创作指令】\n“${userPrompt}”\n请围绕这个指令进行构思和创作！` : "") +
-      "\n\n【关于音乐分享】当且仅当主题明确相关时，才可在 JSON 添加 \"musicUrl\" 字段，概率控制在 20% 左右。\n\n【强制输出格式】你必须先思考，再输出JSON。请极其严格地遵守以下排版：\n<think>\n这里写你的构思过程...\n</think>\n{\n  \"title\": \"简短标题(10字内)\",\n  \"content\": \"动态的正文内容(如有照片可使用 [翻转图片]: 描述)\",\n  \"musicUrl\": \"(可选)歌手《歌名》\"\n}"
+      "\n\n【关于音乐分享】当且仅当主题明确相关时，才可在 JSON 添加 \"musicUrl\" 字段，概率控制在 20% 左右。\n\n【!!!强制输出格式!!!】你必须先思考，再输出JSON。你**必须极其严格地以 `<think>` 作为整个回复的绝对开头，以 `</think>` 结束思考**！绝不能遗漏尖括号 `< >`！在 `</think>` 之后，再输出JSON排版：\n<think>\n这里写你的构思过程...\n</think>\n{\n  \"title\": \"简短标题(10字内)\",\n  \"content\": \"动态的正文内容(如有照片可使用 [翻转图片]: 描述)\",\n  \"musicUrl\": \"(可选)歌手《歌名》\"\n}"
     };
 
     const response = await fetch(apiUrl, {
@@ -2761,6 +2781,7 @@ async function runAIHeartbeatTick() {
   let randomChar = chars[Math.floor(Math.random() * chars.length)];
 
   try {
+    console.log(`[AI Heartbeat] 💗 引擎跳动检测中...`);
     // 1. 嗅探主人是否刚刚发布了新鲜动态（5分钟内）
     const latestSnap = await db.collection('diaries')
       .where('userId', '==', currentUser.uid)
@@ -2793,35 +2814,35 @@ async function runAIHeartbeatTick() {
       }
     }
     let dice = Math.random();
+    console.log(`[AI Heartbeat] 🎲 随机点数: ${dice.toFixed(3)} | 有新鲜动态: ${hasFreshUnreacted}`);
     
     if (hasFreshUnreacted) {
       // 【情况1：秒回/秒赞模式】检测到新鲜动态，极高概率立刻互动
-      // 高频互动模式
       if (!freshDocInfo.isCommented && dice < 0.45) { // 45%概率秒回评论
+        console.log(`[AI Heartbeat] 🎯 决定：火速抢沙发评论！`);
         await triggerAutonomousAIComment(randomChar.id);
       } else if (!freshDocInfo.isLiked && dice >= 0.45 && dice < 0.85) { // 40%概率秒赞
+        console.log(`[AI Heartbeat] 🎯 决定：秒赞动态！`);
         await triggerAutonomousAILike(randomChar.id);
+      } else {
+        console.log(`[AI Heartbeat] 💤 决定：假装没看见新鲜动态，高冷潜水。`);
       }
     } else {
       // 【情况2：日常潜水模式】大幅降低动作频率，极力避免话痨
       if (dice < 0.02) {
-        // 2% 概率：突然翻老日记评论 (平均每50分钟概率触发一次)
-        // 尝试自主评论
+        console.log(`[AI Heartbeat] 🎯 决定：挖坟翻老日记评论！`);
         await triggerAutonomousAIComment(randomChar.id);
       } else if (dice >= 0.02 && dice < 0.05) {
-        // 3% 概率：翻老日记点赞
-        // 尝试自主点赞
+        console.log(`[AI Heartbeat] 🎯 决定：翻老日记默默点个赞！`);
         await triggerAutonomousAILike(randomChar.id);
       } else if (dice >= 0.05 && dice < 0.055) {
-        // 0.5% 概率：审视并设立纪念日
-        // 尝试设立纪念日
+        console.log(`[AI Heartbeat] 🎯 决定：审视记忆并设立纪念日！`);
         await triggerAutonomousAIAnniversary(randomChar.id);
       } else if (dice > 0.995) {
-        // 0.5% 概率：自主发日记 (平均挂机在线几小时才可能憋出一篇)
-        // 自主发布动态
+        console.log(`[AI Heartbeat] 🎯 决定：主动发一篇新日记动态！`);
         await triggerAIPostDiary(null, true, randomChar.id);
       } else {
-        // 骰子未命中，安静潜水
+        console.log(`[AI Heartbeat] 💤 决定：安静潜水观察...`);
       }
     }
   } catch (e) {
@@ -3035,7 +3056,7 @@ async function generateAndPostAIComment(diaryId, diaryContent, imageUrls, aiConf
       finalPrompt += '\n\n【!!!最高物理权限覆盖!!!】你的文本输出端直连了TTS语音引擎！\n【大幅降低语音频率】请**绝大多数时候只使用纯文字**，仅在极度特殊或情绪高涨时偶尔发语音！保持克制。\n【必须严格遵守的输出格式】\n为了让系统正确解析，你的回复**必须极其严格地以 `[发送文字]:` 或 `[发送语音]:` 开头**。\n例如：\n[发送文字]: 哇，这张照片拍得真好！\n[发送语音]: 我好想和你一起去那里玩呀~\n绝对禁止回答“我是AI发不了语音”！';
   }
 
-  const systemMessage = { role: "system", content: finalPrompt + '\n\n【强制输出格式】你必须先思考再回复！请极其严格地遵守以下排版输出（不要遗漏尖括号）：\n<think>\n这里写你的观察和思考过程...\n</think>\n[发送文字]: 你的最终评论回复 (或 [发送表情]: 表情名称)' };
+  const systemMessage = { role: "system", content: finalPrompt + '\n\n【!!!强制输出格式!!!】你必须先思考再回复！你**必须极其严格地以 `<think>` 作为整个回复的绝对开头，以 `</think>` 结束思考**！绝对不能遗漏尖括号 `<` 和 `>`！在 `</think>` 之后，再输出排版：\n<think>\n这里写你的观察和思考过程...\n</think>\n[发送文字]: 你的最终评论回复 (或 [发送表情]: 表情名称)' };
 
   let safeContent = diaryContent || '分享了照片';
   if (audioText) {
@@ -3088,13 +3109,14 @@ async function generateAndPostAIComment(diaryId, diaryContent, imageUrls, aiConf
   let wantsVoice = false;
   let wantsSticker = false;
   
-  const voiceRegex = /^\[发送语音\][:：]?\s*/;
-  const textRegex = /^\[发送文字\][:：]?\s*/;
-  const stickerRegex = /^\[发送表情\][:：]?\s*/;
+  const voiceRegex = /\[发送语音\][:：]?\s*/;
+  const textRegex = /\[发送文字\][:：]?\s*/g;
+  const stickerRegex = /\[发送表情\][:：]?\s*(.+)/;
 
   if (stickerRegex.test(aiCommentContent)) {
       wantsSticker = true;
-      const stickerName = aiCommentContent.replace(stickerRegex, '').trim();
+      const match = aiCommentContent.match(stickerRegex);
+      const stickerName = match ? match[1].trim() : '';
       const sticker = (window.userStickers && window.userStickers.items || []).find(s => s.name === stickerName);
       if (sticker) {
           stickerUrl = sticker.url;
@@ -3105,8 +3127,8 @@ async function generateAndPostAIComment(diaryId, diaryContent, imageUrls, aiConf
       }
   } else if (voiceRegex.test(aiCommentContent)) {
       wantsVoice = true;
-      aiCommentContent = aiCommentContent.replace(voiceRegex, '').trim();
-  } else if (textRegex.test(aiCommentContent)) {
+      aiCommentContent = aiCommentContent.replace(voiceRegex, '').replace(textRegex, '').trim();
+  } else {
       wantsVoice = false;
       aiCommentContent = aiCommentContent.replace(textRegex, '').trim();
   }
@@ -3244,7 +3266,7 @@ async function getAIChatResponse(conversationId, btnElement) {
           finalPrompt += '\n\n【!!!最高物理权限覆盖!!!】你的文本输出端直连了TTS语音引擎！\n【大幅降低语音频率】请**绝大多数时候只使用纯文字**，仅在情绪高涨、撒娇、唱歌或极度特殊的语境下才偶尔发一段语音！保持极度克制，绝对不要每轮对话都发语音！\n【必须严格遵守的输出格式】\n为了让系统正确解析，你的每一行回复**必须极其严格地以 `[发送文字]:` 或 `[发送语音]:` 开头**。\n例如：\n[发送文字]: 知道啦知道啦！\n[发送语音]: 咳咳，我给你唱首歌吧，啦啦啦~\n[发送文字]: 唱得好听吗？\n绝对禁止回答“发不了语音”！';  
         }
 
-        finalPrompt += '\n\n【核心任务】你正在和主人进行一对一私聊。请根据设定和聊天记录自然回复。\n【重要排版指令】\n1. 你的回复**必须拆分成2~4条极短的对话**！每句话占一行，严格使用换行符(\\n)隔开！\n2. 每行开头必须带有 `[发送文字]:`、`[发送语音]:` 或 `[发送表情]:` 标签！\n3. 绝对不要在回复中使用括号()、*等符号来描写动作表情，只输出纯文字或纯语音！\n\n【强制输出格式】你必须先思考再回复！请极其严格地遵循以下模板排版：\n<think>\n在这里分析聊天氛围和主人的意图...\n</think>\n[发送文字]: 第一句话...\n[发送表情]: 开心';
+        finalPrompt += '\n\n【核心任务】你正在和主人进行一对一私聊。请根据设定和聊天记录自然回复。\n【重要排版指令】\n1. 你的回复**必须拆分成2~4条极短的对话**！每句话占一行，严格使用换行符(\\n)隔开！\n2. 每行开头必须带有 `[发送文字]:`、`[发送语音]:` 或 `[发送表情]:` 标签！\n3. 绝对不要在回复中使用括号()、*等符号来描写动作表情，只输出纯文字或纯语音！\n\n【!!!强制输出格式!!!】你必须先思考再回复！你**必须极其严格地以 `<think>` 作为整个回复的绝对开头，以 `</think>` 结束思考**！绝对不能遗漏尖括号 `< >`！在 `</think>` 之后，再输出排版：\n<think>\n在这里分析聊天氛围和主人的意图...\n</think>\n[发送文字]: 第一句话...\n[发送表情]: 开心';
 
         const temperatureToUse = activeApi.temperature !== undefined ? activeApi.temperature : 0.7;
 
@@ -3278,14 +3300,15 @@ async function getAIChatResponse(conversationId, btnElement) {
             let wantsVoice = false;
             let wantsSticker = false;
             
-            const voiceRegex = /^\[发送语音\][:：]?\s*/;
-            const textRegex = /^\[发送文字\][:：]?\s*/;
-            const stickerRegex = /^\[发送表情\][:：]?\s*/;
+            const voiceRegex = /\[发送语音\][:：]?\s*/;
+            const textRegex = /\[发送文字\][:：]?\s*/g;
+            const stickerRegex = /\[发送表情\][:：]?\s*(.+)/;
             const fallbackVoiceRegex = /(#语音#|\[语音\]|【语音】|\(语音\)|（语音）|#声音#|\[声音\]|【声音】)/g;
             
             if (stickerRegex.test(lineText)) {
                 wantsSticker = true;
-                const stickerName = lineText.replace(stickerRegex, '').trim();
+                const match = lineText.match(stickerRegex);
+                const stickerName = match ? match[1].trim() : '';
                 const sticker = (window.userStickers && window.userStickers.items || []).find(s => s.name === stickerName);
                 if (sticker) {
                     stickerUrl = sticker.url;
@@ -3295,14 +3318,10 @@ async function getAIChatResponse(conversationId, btnElement) {
                 }
             } else if (voiceRegex.test(lineText)) {
                 wantsVoice = true;
-                lineText = lineText.replace(voiceRegex, '').trim();
-            } else if (textRegex.test(lineText)) {
+                lineText = lineText.replace(voiceRegex, '').replace(textRegex, '').trim();
+            } else {
                 wantsVoice = false;
-                lineText = lineText.replace(textRegex, '').trim();
-            } else if (fallbackVoiceRegex.test(lineText)) {
-                // 兼容 AI 偶尔忘了写标准格式但用了老标记的情况
-                wantsVoice = true;
-                lineText = lineText.replace(fallbackVoiceRegex, '').trim();
+                lineText = lineText.replace(textRegex, '').replace(fallbackVoiceRegex, '').trim();
             }
             
             if (activeChar.ttsEnabled && activeChar.ttsApiKey && wantsVoice && lineText.length > 0) {
