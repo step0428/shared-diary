@@ -53,7 +53,7 @@ function setupChat() {
         chatRecordBtn.type = 'button';
         chatRecordBtn.innerHTML = '🎤';
         chatRecordBtn.title = '点击开始/停止录音';
-        chatRecordBtn.style.cssText = 'background:none; border:none; font-size:18px; cursor:pointer; color:var(--text-muted); padding:0 8px; transition:color 0.2s; display:flex; align-items:center;';
+        chatRecordBtn.style.cssText = 'background:none; border:none; font-size:18px; cursor:pointer; color:var(--text-muted); padding:0 8px; transition:color 0.2s; display:flex; align-items:center; flex-shrink:0;';
         chatImageBtn.parentNode.insertBefore(chatRecordBtn, chatImageBtn.nextSibling);
 
         let chatMediaRecorder = null;
@@ -135,10 +135,11 @@ function setupChat() {
         chatStickerBtn.type = 'button';
         chatStickerBtn.innerHTML = '🤡';
         chatStickerBtn.title = '发送表情';
-        chatStickerBtn.style.cssText = 'background:none; border:none; font-size:18px; cursor:pointer; color:var(--text-muted); padding:0 8px; transition:color 0.2s; display:flex; align-items:center;';
+        chatStickerBtn.style.cssText = 'background:none; border:none; font-size:18px; cursor:pointer; color:var(--text-muted); padding:0 8px; transition:color 0.2s; display:flex; align-items:center; flex-shrink:0;';
         chatImageBtn.parentNode.insertBefore(chatStickerBtn, chatImageBtn.nextSibling);
 
         const chatForm = document.getElementById('chatInputForm');
+        chatForm.style.position = 'relative'; // 确保表情面板在手机上能正确相对底栏弹出
         const stickerPanel = document.createElement('div');
         stickerPanel.id = 'chatStickerPanel';
         stickerPanel.className = 'hidden';
@@ -317,14 +318,60 @@ window.openStickerManager = function() {
         });
     }
 
-    // 绑定长按/右键菜单
-    document.getElementById('chatMessages').addEventListener('contextmenu', (e) => {
+    // --- 绑定长按/右键菜单 (PC 端 & 移动端) ---
+    const chatMessagesEl = document.getElementById('chatMessages');
+    
+    // 注入 CSS 防止 iOS 弹出原生菜单干扰长按
+    if (!document.getElementById('chatMobileStyleFix')) {
+        const style = document.createElement('style');
+        style.id = 'chatMobileStyleFix';
+        style.textContent = `.message-bubble { -webkit-touch-callout: none; }`;
+        document.head.appendChild(style);
+    }
+
+    // PC 端：右键菜单
+    chatMessagesEl.addEventListener('contextmenu', (e) => {
         const bubble = e.target.closest('.message-bubble');
         if (bubble && currentConversationId) {
             e.preventDefault(); // 阻止浏览器默认右键菜单
             showChatMessageMenu(bubble, currentConversationId, e);
         }
     });
+
+    // 移动端：触摸长按模拟
+    let pressTimer = null;
+    let touchStartX = 0;
+    let touchStartY = 0;
+
+    chatMessagesEl.addEventListener('touchstart', (e) => {
+        if (e.touches.length > 1) return; // 忽略多指触控
+        const bubble = e.target.closest('.message-bubble');
+        if (!bubble || !currentConversationId) return;
+
+        const touch = e.touches[0];
+        touchStartX = touch.clientX;
+        touchStartY = touch.clientY;
+
+        pressTimer = setTimeout(() => {
+            pressTimer = null;
+            if (navigator.vibrate) navigator.vibrate(50); // 震动反馈 (支持的设备)
+            // 伪造一个带有 clientX 和 clientY 的事件对象传递给菜单函数
+            const mockEvent = { clientX: touch.clientX, clientY: touch.clientY, preventDefault: () => {} };
+            showChatMessageMenu(bubble, currentConversationId, mockEvent);
+        }, 600); // 600毫秒触发长按
+    }, { passive: true });
+
+    chatMessagesEl.addEventListener('touchmove', (e) => {
+        if (!pressTimer) return;
+        const touch = e.touches[0];
+        if (Math.abs(touch.clientX - touchStartX) > 10 || Math.abs(touch.clientY - touchStartY) > 10) {
+            clearTimeout(pressTimer); pressTimer = null;
+        }
+    }, { passive: true });
+
+    const cancelTouch = () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } };
+    chatMessagesEl.addEventListener('touchend', cancelTouch);
+    chatMessagesEl.addEventListener('touchcancel', cancelTouch);
 }
 
 window.openNewChatModal = async function() {
@@ -414,7 +461,7 @@ async function loadConversations() {
                      userInfoMap.set(char.id, { userId: char.id, displayName: (char.name || '神秘的ta') + ' 🤖', avatarUrl: '', aiAvatar: char.avatar || '🤖' });
                  });
                  if (typeof AI_COMPANION_USER_ID !== 'undefined') {
-                     let activeChar = chars.find(c => c.id === currentUserData.aiConfig.activeCharId) || chars[0] || {};
+                     let activeChar = chars[0] || {};
                      userInfoMap.set(AI_COMPANION_USER_ID, {
                          userId: AI_COMPANION_USER_ID,
                          displayName: (activeChar.name || '神秘的ta') + ' 🤖',

@@ -9,6 +9,11 @@ flipStyle.textContent = `
 .flip-card-front::before { content: '📸'; font-size: 40px; margin-bottom: 12px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1)); }
 .flip-card-back { background-color: #fff; color: #444; transform: rotateY(180deg); font-size: 14px; text-align: left; align-items: flex-start; justify-content: flex-start; padding: 10px; overflow-y: auto; line-height: 1.6; }
 .flip-card-front span { display: none; }
+
+/* --- 移动端底栏输入框防溢出适配 --- */
+#chatInputForm { display: flex !important; width: 100% !important; box-sizing: border-box !important; flex-wrap: nowrap !important; position: relative; }
+#chatMessageInput, #commentInput { flex: 1 1 auto !important; min-width: 0 !important; width: 100% !important; }
+#chatInputForm button, #chatImageUploadBtn, #sendChatMessageBtn, #sendCommentBtn, #recordCommentBtn, #commentStickerBtn { flex-shrink: 0 !important; }
 `;
 document.head.appendChild(flipStyle);
 

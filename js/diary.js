@@ -602,7 +602,9 @@ window.renderMoreDiaries = async function(token) {
 
       if (isAIDiary) {
         let aiConfig = currentUserData && currentUserData.aiConfig ? currentUserData.aiConfig : {};
-        let charIdToUse = data.aiCharId || aiConfig.activeCharId;
+        let charIdToUse = data.aiCharId;
+        if (!charIdToUse && data.userId === AI_COMPANION_USER_ID && aiConfig.chars && aiConfig.chars.length > 0) charIdToUse = aiConfig.chars[0].id;
+        else if (!charIdToUse) charIdToUse = aiConfig.activeCharId;
         let activeChar = (aiConfig.chars || []).find(c => c.id === charIdToUse) || (aiConfig.chars || [])[0] || {};
         authorName = (activeChar.name || '神秘的ta') + ' 🤖';
       }
@@ -910,7 +912,10 @@ async function showDiaryDetail(diaryId, isMine, isCoAuthor) {
 
   if (data.userId === AI_COMPANION_USER_ID || String(data.userId).startsWith('char_')) {
     let aiConfig = currentUserData && currentUserData.aiConfig ? currentUserData.aiConfig : {};
-    let activeChar = (aiConfig.chars || []).find(c => c.id === data.userId) || (aiConfig.chars || []).find(c => c.id === aiConfig.activeCharId) || (aiConfig.chars || [])[0] || {};
+    let charIdToUse = data.aiCharId;
+    if (!charIdToUse && data.userId === AI_COMPANION_USER_ID && aiConfig.chars && aiConfig.chars.length > 0) charIdToUse = aiConfig.chars[0].id;
+    else if (!charIdToUse) charIdToUse = data.userId;
+    let activeChar = (aiConfig.chars || []).find(c => c.id === charIdToUse) || (aiConfig.chars || [])[0] || {};
     authorName = (activeChar.name || '神秘的ta') + ' 🤖';
     userData = { userId: data.userId, displayName: authorName, aiAvatar: activeChar.avatar || '🤖' };
   }
@@ -979,7 +984,9 @@ async function showDiaryDetail(diaryId, isMine, isCoAuthor) {
   let generateVoiceBtnHtml = '';
   if (isAIDiary && !data.audioUrl && typeof currentUserData !== 'undefined' && currentUserData && currentUserData.aiConfig) {
     let aiConfig = currentUserData.aiConfig;
-    let charIdToUse = data.aiCharId || aiConfig.activeCharId;
+    let charIdToUse = data.aiCharId;
+    if (!charIdToUse && data.userId === AI_COMPANION_USER_ID && aiConfig.chars && aiConfig.chars.length > 0) charIdToUse = aiConfig.chars[0].id;
+    else if (!charIdToUse) charIdToUse = aiConfig.activeCharId;
     let activeChar = (aiConfig.chars || []).find(c => c.id === charIdToUse) || (aiConfig.chars || [])[0];
     if (activeChar && activeChar.ttsEnabled && activeChar.ttsApiKey) {
       generateVoiceBtnHtml = '<button id="generateVoiceBtn" style="margin-top:20px;margin-right:10px;padding:10px 20px;background:var(--accent-light);border:1px solid var(--accent);border-radius:8px;color:var(--accent);cursor:pointer;" title="为这篇动态生成语音">🎵 生成语音</button>';
@@ -1207,7 +1214,7 @@ async function loadComments(diaryId) {
         let displayName = comment.userDisplayName || '匿名';
         if ((comment.userId === AI_COMPANION_USER_ID || String(comment.userId).startsWith('char_')) && !displayName.includes('🤖')) displayName += ' 🤖';
         
-        let commentAuthorInfo = { userId: comment.userId, displayName: comment.userDisplayName, avatarUrl: comment.userAvatar };
+        let commentAuthorInfo = { userId: comment.userId, displayName: comment.userDisplayName, avatarUrl: comment.userAvatar, aiAvatar: comment.userAvatar };
         let avatarHtml = renderUserAvatar(commentAuthorInfo, 32);
 
         let canDelete = currentUser.uid === diaryOwnerId || 
@@ -1218,6 +1225,7 @@ async function loadComments(diaryId) {
         let isAIComment = (comment.userId === AI_COMPANION_USER_ID || String(comment.userId).startsWith('char_'));
         let canRegen = isAIComment && comment.aiCreatorId === currentUser.uid;
         let regenBtnHtml = canRegen ? '<button class="regen-comment-btn" data-id="' + doc.id + '" style="color:var(--accent);margin-left:8px;background:none;border:none;cursor:pointer;font-size:12px;">🎲重roll</button>' : '';
+        let askAIBtnHtml = '<button class="ask-ai-reply-btn" data-id="' + doc.id + '" style="color:var(--accent);margin-left:8px;background:none;border:none;cursor:pointer;font-size:12px;">✨让ta回复</button>';
 
         let item = document.createElement('div');
         item.className = 'comment-item' + (comment.stickerUrl ? ' comment-item-sticker' : ''); // Add class for sticker comments
@@ -1225,7 +1233,7 @@ async function loadComments(diaryId) {
         let stickerHtml = comment.stickerUrl ? `<div style="margin-top:8px;"><img src="${escapeHtml(comment.stickerUrl)}" style="max-width: 120px; max-height: 120px; border-radius: 8px; background: var(--bg-tertiary);"></div>` : '';
         let audioHtml = comment.audioUrl ? '<div style="margin-top:8px;"><audio src="' + escapeHtml(comment.audioUrl) + '" controls style="width:100%;max-width:300px;height:36px;outline:none;border-radius:8px;"></audio></div>' : '';
         let audioTextHtml = (comment.audioUrl && comment.audioText) ? '<div style="font-size:13px;color:var(--text-muted);margin-top:4px;">[语音识别] ' + escapeHtml(comment.audioText) + '</div>' : '';
-        item.innerHTML = avatarHtml + '<div class="comment-body"><div class="comment-header"><span class="comment-author">' + escapeHtml(displayName) + '</span><span class="comment-time">' + timeStr + '</span></div><div class="comment-content">' + (comment.content ? window.parseAIText(escapeHtml(comment.content)) : '') + stickerHtml + audioHtml + audioTextHtml + '</div><div class="comment-actions"><button class="reply-btn" data-id="' + doc.id + '">回复</button>' + regenBtnHtml + (canDelete ? '<button class="delete-comment-btn" data-id="' + doc.id + '">删除</button>' : '') + '</div></div>';
+        item.innerHTML = avatarHtml + '<div class="comment-body"><div class="comment-header"><span class="comment-author">' + escapeHtml(displayName) + '</span><span class="comment-time">' + timeStr + '</span></div><div class="comment-content">' + (comment.content ? window.parseAIText(escapeHtml(comment.content)) : '') + stickerHtml + audioHtml + audioTextHtml + '</div><div class="comment-actions"><button class="reply-btn" data-id="' + doc.id + '">回复</button>' + regenBtnHtml + askAIBtnHtml + (canDelete ? '<button class="delete-comment-btn" data-id="' + doc.id + '">删除</button>' : '') + '</div></div>';
         return item;
       }
 
@@ -1501,6 +1509,53 @@ async function loadComments(diaryId) {
       }
     };
   });
+
+  document.querySelectorAll('.ask-ai-reply-btn').forEach(function(btn) {
+    btn.onclick = async function(e) {
+      let commentId = this.dataset.id;
+      let aiConfig = currentUserData.aiConfig || {};
+      if (!aiConfig.enabled) {
+        alert('请先在菜单「和ta遇见」中开启互动开关！');
+        return;
+      }
+      let chars = aiConfig.chars || [];
+      if (chars.length === 0) return;
+      
+      const activeApi = (aiConfig.apis || []).find(a => a.id === aiConfig.activeApiId) || (aiConfig.apis || [])[0];
+      if (!activeApi || !activeApi.key) {
+         alert('请先在 API 配置中填写有效的 API Key！');
+         return;
+      }
+
+      const executeReply = async (selectedCharId) => {
+         let btnOrigText = btn.innerHTML;
+         btn.innerHTML = '⏳...';
+         btn.disabled = true;
+         try {
+           let cDoc = await db.collection('comments').doc(commentId).get();
+           if(!cDoc.exists) return;
+           let dDoc = await db.collection('diaries').doc(currentDiaryIdForComment).get();
+           if(!dDoc.exists) return;
+           let dData = dDoc.data();
+           let urls = dData.imageUrls || (dData.imageUrl ? [dData.imageUrl] : []);
+           let targetCommentObj = { id: cDoc.id, data: cDoc.data() };
+           await generateAndPostAIComment(currentDiaryIdForComment, dData.content, urls, aiConfig, activeApi, targetCommentObj, dData.audioText, selectedCharId);
+         } catch(err) {
+           console.error(err);
+           alert("让ta回复失败");
+         } finally {
+           btn.innerHTML = btnOrigText;
+           btn.disabled = false;
+         }
+      };
+
+      if (chars.length > 1) {
+        showCharSelectionMenu(e.currentTarget, chars, executeReply);
+      } else {
+        executeReply(chars[0].id);
+      }
+    };
+  });
 }
 
 // 添加评论或回复
@@ -1627,7 +1682,7 @@ async function triggerAIReplyToComment(diaryId, targetCommentId, userContent, ai
     // Add sticker prompt
     if (window.userStickers && window.userStickers.items && window.userStickers.items.length > 0) {
         const stickerNames = window.userStickers.items.map(s => s.name).join(', ');
-        finalPrompt += `\n\n【表情包技能】\n你拥有一个表情包仓库，可用表情列表为：[${stickerNames}]。\n【表情包输出格式】若要发送表情，请严格使用 \`[发送文字]: 你的文字\` 或 \`[发送表情]: 列表中的表情名称\` 格式，单独占一行。\n【系统警告】**绝对禁止捏造不存在的表情名称！只能且必须从上述提供的列表中精确复制名称！**\n【使用频率】请克制使用，保持活人感。`;
+        finalPrompt += `\n\n【表情包技能】\n你拥有一个表情包仓库，可用表情列表为：[${stickerNames}]。\n【表情包输出格式】若要发送表情，请严格使用 \`[发送表情]: 列表中的表情名称\` 格式，单独占一行。\n【系统警告】**绝对禁止捏造不存在的表情名称！如果没有完全符合你当下心情的表情，请放弃使用表情包，直接用纯文字回复！绝不许自己编造不存在的词汇！**\n【使用频率】请克制使用，保持活人感。`;
     }
     
     finalPrompt += '\n\n【特殊技能：盲盒照片】\n若想发一张神秘互动的“图片”，请严格独占一行输出：\n[翻转图片]: 这里写照片的具体文字描述\n系统会渲染成一张点击可翻转的照片卡片，背向主人展示你写的内容。适合用来分享风景、制造惊喜或恶搞！(聊天/回复时请以 `[发送文字]: [翻转图片]: 描述` 输出)';
@@ -1639,6 +1694,29 @@ async function triggerAIReplyToComment(diaryId, targetCommentId, userContent, ai
     finalPrompt += '\n\n【核心任务】主人在日记评论区与你互动了（评论了你的动态或回复了你的留言）。请你自然地回复主人，字数不限，完全根据当下语境和心情自然决定长短，极具活人感，口吻随意亲切。';
     finalPrompt += '\n\n【!!!强制思维链指令!!!】在给出最终回复前，你必须先进行思考。你**必须极其严格地以 `<think>` 作为输出的绝对开头，以 `</think>` 作为思考的结束**！绝对不能遗漏尖括号 `<` 和 `>`！在 `</think>` 之后，再输出最终指定的回复内容。';
 
+    let dContent = '未知动态';
+    let existingCommentsText = '';
+    try {
+        let dDoc = await db.collection('diaries').doc(diaryId).get();
+        if (dDoc.exists) dContent = dDoc.data().content || '分享了照片/录音';
+        const commentsSnap = await db.collection('comments').where('diaryId', '==', diaryId).get();
+        if (!commentsSnap.empty) {
+            let allComments = commentsSnap.docs.map(d => Object.assign({_id: d.id}, d.data())).sort((a, b) => (a.createdAt ? a.createdAt.toMillis() : 0) - (b.createdAt ? b.createdAt.toMillis() : 0));
+            existingCommentsText = '\n【原动态下的完整评论记录】\n';
+            allComments.forEach(cData => {
+                let cName = cData.userDisplayName || '匿名';
+                if (cData.userId === currentUser.uid) cName = '主人';
+                else if (String(cData.userId).startsWith('char_') || cData.userId === AI_COMPANION_USER_ID) cName = cName + ' (AI伙伴)';
+                else cName = '朋友 (' + cName + ')';
+                let cContent = cData.content || '';
+                if (cData.stickerUrl) cContent += ' [发了一个表情包]';
+                if (cData.audioUrl) cContent += ` [发了一条语音：${cData.audioText || ''}]`;
+                let highlight = (cData._id === targetCommentId) ? ' <--- [这是主人刚刚对你的互动]' : '';
+                existingCommentsText += `- ${cName}: "${cContent}"${highlight}\n`;
+            });
+        }
+    } catch (e) { console.error("获取上下文失败:", e); }
+
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${aiApiKey}` },
@@ -1646,7 +1724,7 @@ async function triggerAIReplyToComment(diaryId, targetCommentId, userContent, ai
         model: activeApi.model || "gpt-3.5-turbo", 
         messages: [
           { role: "system", content: finalPrompt },
-          { role: "user", content: `主人的评论/回复："${userContent}"` }
+          { role: "user", content: `【原动态内容】\n"${dContent}"\n${existingCommentsText}\n请结合上述语境，针对主人刚刚对你的互动（即箭头标记处），自然地给主人回复。` }
         ], 
         temperature: activeApi.temperature !== undefined ? activeApi.temperature : 0.7,
         max_tokens: 150
@@ -1680,7 +1758,7 @@ async function triggerAIReplyToComment(diaryId, targetCommentId, userContent, ai
             stickerUrl = sticker.url;
             aiResponseText = ''; // Sticker comments have no text
         } else {
-            aiResponseText = `[系统提示：找不到名为“${stickerName}”的表情]`;
+            aiResponseText = `(${stickerName})`; // 优雅降级为文字动作描写
             wantsSticker = false;
         }
     } else if (voiceRegex.test(aiResponseText)) {
@@ -1897,8 +1975,28 @@ async function askAIToComment(diaryId, diaryContent, imageUrls = [], diaryOwnerI
     }
     if (!safeContent || safeContent === '分享了照片') safeContent = '分享了照片/录音';
 
+    let existingCommentsText = '';
+    try {
+        const commentsSnap = await db.collection('comments').where('diaryId', '==', diaryId).get();
+        if (!commentsSnap.empty) {
+            let allComments = commentsSnap.docs.map(d => d.data()).sort((a, b) => (a.createdAt ? a.createdAt.toMillis() : 0) - (b.createdAt ? b.createdAt.toMillis() : 0));
+            existingCommentsText = '\n【当前动态下的已有评论区】\n';
+            allComments.forEach(cData => {
+                let cName = cData.userDisplayName || '匿名';
+                if (cData.userId === currentUser.uid) cName = '主人';
+                else if (String(cData.userId).startsWith('char_') || cData.userId === AI_COMPANION_USER_ID) cName = cName + ' (AI伙伴)';
+                else cName = '朋友 (' + cName + ')';
+                let cContent = cData.content || '';
+                if (cData.stickerUrl) cContent += ' [发了一个表情包]';
+                if (cData.audioUrl) cContent += ` [发了一条语音：${cData.audioText || ''}]`;
+                existingCommentsText += `- ${cName}: "${cContent}"\n`;
+            });
+            existingCommentsText += '\n(提示：你可以参考上面的评论区，选择顺着大家的话题聊、互动起哄，或者提出你的新见解。就像真实的“朋友圈”群体互动一样！)\n\n';
+        }
+    } catch (e) { console.error("获取评论失败:", e); }
+
     let userMessage;
-    let baseText = `这是一篇${authorRole}刚发布的动态：\n\n"${safeContent}"\n\n请结合这篇动态的内容，以${aiPersonaName}的身份发表一句评论，字数不限，完全根据当下语境自然决定长短，体现极强的活人感，语气符合你的人设，自然地融入朋友圈氛围。`;
+    let baseText = `这是一篇${authorRole}刚发布的动态：\n\n"${safeContent}"\n\n${existingCommentsText}请结合这篇动态的内容与评论区氛围，以${aiPersonaName}的身份发表一句评论，字数不限，完全根据当下语境自然决定长短，体现极强的活人感，语气符合你的人设，自然地融入朋友圈氛围。`;
 
     if (hasImages) {
         let contentArray = [
@@ -2789,75 +2887,79 @@ async function runAIHeartbeatTick() {
   if (!aiConfig.enabled) return;
   let chars = aiConfig.chars || [];
   if (chars.length === 0) return;
-  let randomChar = chars[Math.floor(Math.random() * chars.length)];
 
   try {
-    console.log(`[AI Heartbeat] 💗 引擎跳动检测中...`);
-    // 1. 嗅探主人是否刚刚发布了新鲜动态（5分钟内）
+    console.log(`[AI Heartbeat] 💗 引擎跳动检测中... 当前活跃角色数: ${chars.length}`);
+    // 1. 统一嗅探主人是否刚刚发布了新鲜动态（5分钟内）
     const latestSnap = await db.collection('diaries')
       .where('userId', '==', currentUser.uid)
       .orderBy('date', 'desc')
       .limit(3)
       .get();
       
-    let hasFreshUnreacted = false;
-    let freshDocInfo = null;
-    
-    if (!latestSnap.empty) {
-      // 在最近的记录里寻找“刚刚发出的”
-      for (let doc of latestSnap.docs) {
-        let data = doc.data();
-        if (!data.isAIDiary && data.createdAt) {
-          let timeDiff = Date.now() - data.createdAt.toMillis();
-          if (timeDiff < 5 * 60 * 1000) { // 5分钟内的动态属于“新鲜”
-            let likes = data.likes || [];
-            let isLiked = likes.includes(AI_COMPANION_USER_ID) || likes.includes(randomChar.id);
-            let commentsSnap = await db.collection('comments').where('diaryId', '==', doc.id).where('userId', 'in', [AI_COMPANION_USER_ID, randomChar.id]).get();
-            let isCommented = !commentsSnap.empty;
-            
-            if (!isLiked || !isCommented) {
-              hasFreshUnreacted = true;
-              freshDocInfo = { isLiked: isLiked, isCommented: isCommented };
-              break; // 找到一篇新鲜的就行
+    // 2. 为每一个角色独立进行心跳结算
+    for (let char of chars) {
+      let charId = char.id;
+      let hasFreshUnreacted = false;
+      let freshDocInfo = null;
+      
+      if (!latestSnap.empty) {
+        // 在最近的记录里寻找“刚刚发出的”
+        for (let doc of latestSnap.docs) {
+          let data = doc.data();
+          if (!data.isAIDiary && data.createdAt) {
+            let timeDiff = Date.now() - data.createdAt.toMillis();
+            if (timeDiff < 5 * 60 * 1000) { // 5分钟内的动态属于“新鲜”
+              let likes = data.likes || [];
+              let isLiked = likes.includes(AI_COMPANION_USER_ID) || likes.includes(charId);
+              let commentsSnap = await db.collection('comments').where('diaryId', '==', doc.id).where('userId', 'in', [AI_COMPANION_USER_ID, charId]).get();
+              let isCommented = !commentsSnap.empty;
+              
+              if (!isLiked || !isCommented) {
+                hasFreshUnreacted = true;
+                freshDocInfo = { isLiked: isLiked, isCommented: isCommented };
+                break; // 找到一篇新鲜的就行
+              }
             }
           }
         }
       }
-    }
-    let dice = Math.random();
-    console.log(`[AI Heartbeat] 🎲 随机点数: ${dice.toFixed(3)} | 有新鲜动态: ${hasFreshUnreacted}`);
-    
-    if (hasFreshUnreacted) {
-      // 【情况1：秒回/秒赞模式】检测到新鲜动态，极高概率立刻互动
-      if (!freshDocInfo.isCommented && dice < 0.45) { // 45%概率秒回评论
-        console.log(`[AI Heartbeat] 🎯 决定：火速抢沙发评论！`);
-        await triggerAutonomousAIComment(randomChar.id);
-      } else if (!freshDocInfo.isLiked && dice >= 0.45 && dice < 0.85) { // 40%概率秒赞
-        console.log(`[AI Heartbeat] 🎯 决定：秒赞动态！`);
-        await triggerAutonomousAILike(randomChar.id);
+      
+      let dice = Math.random();
+      console.log(`[AI Heartbeat - ${char.name}] 🎲 随机点数: ${dice.toFixed(3)} | 有新鲜动态: ${hasFreshUnreacted}`);
+      
+      if (hasFreshUnreacted) {
+        // 【情况1：秒回/秒赞模式】检测到新鲜动态，极高概率立刻互动
+        if (!freshDocInfo.isCommented && dice < 0.45) { // 45%概率秒回评论
+          console.log(`[AI Heartbeat - ${char.name}] 🎯 决定：火速抢沙发评论！`);
+          await triggerAutonomousAIComment(charId);
+        } else if (!freshDocInfo.isLiked && dice >= 0.45 && dice < 0.85) { // 40%概率秒赞
+          console.log(`[AI Heartbeat - ${char.name}] 🎯 决定：秒赞动态！`);
+          await triggerAutonomousAILike(charId);
+        } else {
+          console.log(`[AI Heartbeat - ${char.name}] 💤 决定：假装没看见新鲜动态，高冷潜水。`);
+        }
       } else {
-        console.log(`[AI Heartbeat] 💤 决定：假装没看见新鲜动态，高冷潜水。`);
+        // 【情况2：日常潜水模式】大幅降低动作频率，极力避免话痨
+        if (dice < 0.02) {
+          console.log(`[AI Heartbeat - ${char.name}] 🎯 决定：挖坟翻老日记评论！`);
+          await triggerAutonomousAIComment(charId);
+        } else if (dice >= 0.02 && dice < 0.05) {
+          console.log(`[AI Heartbeat - ${char.name}] 🎯 决定：翻老日记默默点个赞！`);
+          await triggerAutonomousAILike(charId);
+        } else if (dice >= 0.05 && dice < 0.055) {
+          console.log(`[AI Heartbeat - ${char.name}] 🎯 决定：审视记忆并设立纪念日！`);
+          await triggerAutonomousAIAnniversary(charId);
+        } else if (dice > 0.995) {
+          console.log(`[AI Heartbeat - ${char.name}] 🎯 决定：主动发一篇新日记动态！`);
+          await triggerAIPostDiary(null, true, charId);
+        } else {
+          console.log(`[AI Heartbeat - ${char.name}] 💤 决定：安静潜水观察...`);
+        }
       }
-    } else {
-      // 【情况2：日常潜水模式】大幅降低动作频率，极力避免话痨
-      if (dice < 0.02) {
-        console.log(`[AI Heartbeat] 🎯 决定：挖坟翻老日记评论！`);
-        await triggerAutonomousAIComment(randomChar.id);
-      } else if (dice >= 0.02 && dice < 0.05) {
-        console.log(`[AI Heartbeat] 🎯 决定：翻老日记默默点个赞！`);
-        await triggerAutonomousAILike(randomChar.id);
-      } else if (dice >= 0.05 && dice < 0.055) {
-        console.log(`[AI Heartbeat] 🎯 决定：审视记忆并设立纪念日！`);
-        await triggerAutonomousAIAnniversary(randomChar.id);
-      } else if (dice > 0.995) {
-        console.log(`[AI Heartbeat] 🎯 决定：主动发一篇新日记动态！`);
-        await triggerAIPostDiary(null, true, randomChar.id);
-      } else {
-        console.log(`[AI Heartbeat] 💤 决定：安静潜水观察...`);
-      }
-    }
+    } // 结束针对单角色的循环
   } catch (e) {
-    // AI Heartbeat 引擎异常
+    console.error("[AI Heartbeat] 引擎异常:", e);
   }
 }
 
@@ -2885,18 +2987,18 @@ async function triggerAutonomousAIComment(charId) {
         .where('diaryId', '==', doc.id)
         .get();
 
-      let hasAIComment = false;
+      let hasThisCharCommented = false;
       let otherComments = [];
       commentsSnapshot.forEach(c => {
          let cData = c.data();
-         if (cData.userId === AI_COMPANION_USER_ID || String(cData.userId).startsWith('char_')) {
-           hasAIComment = true;
+         if (cData.userId === charId || cData.userId === AI_COMPANION_USER_ID) {
+           hasThisCharCommented = true;
          } else if (cData.userId !== currentUser.uid) {
            otherComments.push({ id: c.id, data: cData });
          }
       });
 
-      if (!hasAIComment) {
+      if (!hasThisCharCommented) {
         let targetComment = null;
         let urls = diaryData.imageUrls || (diaryData.imageUrl ? [diaryData.imageUrl] : []);
         if (otherComments.length > 0 && Math.random() < 0.4) {
@@ -3058,7 +3160,7 @@ async function generateAndPostAIComment(diaryId, diaryContent, imageUrls, aiConf
   // Add sticker prompt
   if (window.userStickers && window.userStickers.items && window.userStickers.items.length > 0) {
       const stickerNames = window.userStickers.items.map(s => s.name).join(', ');
-      finalPrompt += `\n\n【表情包技能】\n你拥有一个表情包仓库，可用表情列表为：[${stickerNames}]。\n【表情包输出格式】若要发送表情，请严格使用 \`[发送文字]: 你的文字\` 或 \`[发送表情]: 列表中的表情名称\` 格式，单独占一行。\n【系统警告】**绝对禁止捏造不存在的表情名称！只能且必须从上述提供的列表中精确复制名称！**\n【使用频率】请克制使用，保持活人感。`;
+      finalPrompt += `\n\n【表情包技能】\n你拥有一个表情包仓库，可用表情列表为：[${stickerNames}]。\n【表情包输出格式】若要发送表情，请严格使用 \`[发送表情]: 列表中的表情名称\` 格式，单独占一行。\n【系统警告】**绝对禁止捏造不存在的表情名称！如果没有完全符合你当下心情的表情，请放弃使用表情包，直接用纯文字回复！绝不许自己编造不存在的词汇！**\n【使用频率】请克制使用，保持活人感。`;
   }
   
   finalPrompt += '\n\n【特殊技能：盲盒照片】\n若想发一张神秘互动的“图片”，请严格独占一行输出：\n[翻转图片]: 这里写照片的具体文字描述\n系统会渲染成一张点击可翻转的照片卡片，背向主人展示你写的内容。适合用来分享风景、制造惊喜或恶搞！(评论时请以 `[发送文字]: [翻转图片]: 描述` 输出)';
@@ -3075,7 +3177,28 @@ async function generateAndPostAIComment(diaryId, diaryContent, imageUrls, aiConf
   }
   if (!safeContent || safeContent === '分享了照片') safeContent = '分享了照片/录音';
 
-  let baseMsgText = `主人刚刚发了一篇动态：\n\n"${safeContent}"\n\n`;
+  let existingCommentsText = '';
+  try {
+      const commentsSnap = await db.collection('comments').where('diaryId', '==', diaryId).get();
+      if (!commentsSnap.empty) {
+          let allComments = commentsSnap.docs.map(d => Object.assign({_id: d.id}, d.data())).sort((a, b) => (a.createdAt ? a.createdAt.toMillis() : 0) - (b.createdAt ? b.createdAt.toMillis() : 0));
+          existingCommentsText = '\n【当前动态下的已有评论区】\n';
+          allComments.forEach(cData => {
+              let cName = cData.userDisplayName || '匿名';
+              if (cData.userId === currentUser.uid) cName = '主人';
+              else if (String(cData.userId).startsWith('char_') || cData.userId === AI_COMPANION_USER_ID) cName = cName + ' (AI伙伴)';
+              else cName = '朋友 (' + cName + ')';
+              let cContent = cData.content || '';
+              if (cData.stickerUrl) cContent += ' [发了一个表情包]';
+              if (cData.audioUrl) cContent += ` [发了一条语音：${cData.audioText || ''}]`;
+              let highlight = (targetComment && cData._id === targetComment.id) ? ' <--- [你需要回复这条评论]' : '';
+              existingCommentsText += `- ${cName}: "${cContent}"${highlight}\n`;
+          });
+          existingCommentsText += '\n(提示：你可以参考上面的评论区进行互动。就像真实的“朋友圈”群体互动一样！)\n\n';
+      }
+  } catch (e) { console.error("获取评论失败:", e); }
+
+  let baseMsgText = `主人刚刚发了一篇动态：\n\n"${safeContent}"\n\n${existingCommentsText}`;
   if (targetComment) {
      let commentContent = targetComment.data.content || '';
      if (targetComment.data.stickerUrl) {
@@ -3086,7 +3209,8 @@ async function generateAndPostAIComment(diaryId, diaryContent, imageUrls, aiConf
          }
          commentContent += ` [发送了表情包：${sName}]`;
      }
-     baseMsgText += `主人的朋友（${targetComment.data.userDisplayName}）在这篇动态下评论说："${commentContent}"\n\n请以${aiPersonaName}的身份回复这位朋友的评论(字数不限，长短随心)，体现极致的活人感，要有同理心，语气自然，可以体现出你对主人的了解和你们的羁绊。`;
+     let targetRole = targetComment.data.userId === currentUser.uid ? '主人' : (String(targetComment.data.userId).startsWith('char_') || targetComment.data.userId === AI_COMPANION_USER_ID ? `AI伙伴（${targetComment.data.userDisplayName}）` : `主人的现实朋友（${targetComment.data.userDisplayName}）`);
+     baseMsgText += `\n\n${targetRole}在这篇动态下留言说："${commentContent}"\n\n请以${aiPersonaName}的身份回复${targetRole}的留言(字数不限，长短随心)。如果对方是主人，请自然亲昵；如果对方是主人的现实朋友，请礼貌活泼或带点恰当的护短占有欲；如果对方是其他AI伙伴，则可以加入群聊自然拌嘴甚至吐槽。请体现极致的活人感，要有同理心，展现出你对主人的了解和你们的羁绊。`;
   } else {
      baseMsgText += `请结合主人的动态（如果带有图片请仔细观察图片细节），以${aiPersonaName}的身份回复这篇动态(字数不限，长短随心)，体现极致的活人感，要有同理心，就像平时朋友点进朋友圈聊天一样。`;
   }
@@ -3138,7 +3262,7 @@ async function generateAndPostAIComment(diaryId, diaryContent, imageUrls, aiConf
           stickerUrl = sticker.url;
           aiCommentContent = ''; // Sticker comments have no text
       } else {
-          aiCommentContent = `[系统提示：找不到名为“${stickerName}”的表情]`;
+          aiCommentContent = `(${stickerName})`; // 优雅降级为文字动作描写
           wantsSticker = false;
       }
   } else if (voiceRegex.test(aiCommentContent)) {
@@ -3221,7 +3345,7 @@ async function getAIChatResponse(conversationId, btnElement) {
         if (String(otherUserId).startsWith('char_')) {
             activeChar = (aiConfig.chars || []).find(c => c.id === otherUserId) || (aiConfig.chars || [])[0] || {};
         } else {
-            activeChar = (aiConfig.chars || []).find(c => c.id === aiConfig.activeCharId) || (aiConfig.chars || [])[0] || {};
+            activeChar = (aiConfig.chars || [])[0] || {};
         }
         const activePersona = activeChar.boundPersonaId ? (aiConfig.personas || []).find(p => p.id === activeChar.boundPersonaId) : null;
         const enabledWorldbooks = (aiConfig.worldbooks || []).filter(w => w.isEnabled && (w.isGlobal || w.boundCharId === activeChar.id));

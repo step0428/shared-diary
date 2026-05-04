@@ -196,7 +196,11 @@ async function loadCalendarEvents() {
       let finalDisplayName = authorInfo.displayName;
 
       if (isAIDiary && typeof currentUserData !== 'undefined' && currentUserData.aiConfig) {
-        let activeChar = (currentUserData.aiConfig.chars || []).find(c => c.id === currentUserData.aiConfig.activeCharId) || (currentUserData.aiConfig.chars || [])[0] || {};
+        let aiConfig = currentUserData.aiConfig;
+        let charIdToUse = data.aiCharId;
+        if (!charIdToUse && data.userId === AI_COMPANION_USER_ID && aiConfig.chars && aiConfig.chars.length > 0) charIdToUse = aiConfig.chars[0].id;
+        else if (!charIdToUse) charIdToUse = aiConfig.activeCharId;
+        let activeChar = (aiConfig.chars || []).find(c => c.id === charIdToUse) || (aiConfig.chars || [])[0] || {};
         finalDisplayName = (activeChar.name || '神秘的ta') + ' 🤖';
         finalAvatarUrl = activeChar.avatar && activeChar.avatar.startsWith('http') ? activeChar.avatar : '';
       }
